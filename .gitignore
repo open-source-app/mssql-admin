@@ -1,0 +1,9 @@
+build
+dist
+virtual
+gajhal.mp4
+main.spec
+temp.txt
+TMS*
+data
+__pycache__
