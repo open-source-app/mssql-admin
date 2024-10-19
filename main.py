@@ -112,7 +112,7 @@ class MainPage(ttk.Frame):
         table_combobox = ttk.Combobox(
                 frame,
                 textvariable=self.selected_table_var,
-                values=[table_name[0] for table_name in self.tables.values],
+                values=sorted([table_name[0] for table_name in self.tables.values]),
                 state="readonly",
                 width=50
                 )
@@ -133,7 +133,7 @@ class MainPage(ttk.Frame):
         column_button.grid(row=2, column=1, sticky="we", pady=(5,0))
 
         self.new_button = ttk.Button(
-            frame, text="New Entry", style="Bold.TButton", command=self.new_entry_wiegets
+            frame, text="New Entry", style="Bold.TButton", command=self.new_entry_widgets
         )
         self.new_button.grid(row=2, column=2, sticky="we", pady=(5,0))
 
@@ -196,7 +196,7 @@ class MainPage(ttk.Frame):
         )
         style.configure("Treeview", rowheight=25, borderwidth=1, relief="solid")
         style.map("Treeview.Heading", background=[("active", "blue")])
-
+        style.configure("Custom.Treeview.Heading", background="yellow", foreground="black", font=("Arial", 10, "bold"))
         self.save_button = ttk.Button(
             frame, text="Save", style="Bold.TButton", command=self.save_method
         )
@@ -221,7 +221,32 @@ class MainPage(ttk.Frame):
             frame, text="Next >", style="Bold.TButton", command=self.get_next_page
         )
         self.next_button.grid(row=1, column=2, sticky="we")
+
+        specific_label = ttk.Label(
+                frame, style="Main.TLabel", text="Enter Page Number", justify='center', anchor='c'
+            )
+        specific_label.grid(row=2, column=0, sticky="we")
+ 
+        self.specific_page_entry = ttk.Entry(frame)
+        self.specific_page_entry.grid(row=2, column=1, sticky="we")
+        
+        self.specific_page_button = ttk.Button(
+            frame, text="Get Page", style="Bold.TButton", command=self.get_specific_page
+        )
+        self.specific_page_button.grid(row=2, column=2, sticky="we")   
     
+    def get_specific_page(self):
+        page = self.specific_page_entry.get()
+        try:
+            page = int(page)
+        except:
+            messagebox.showerror('Invalid Value', 'Please Enter Integer value')
+            return
+        if page > self.total_pages or page<1:
+            messagebox.showerror('Page out of reached', 'Page Does not Exists')
+            return
+        self.show_selected_columns(page=page)
+
     def get_next_page(self):
         page = self.page_number + 1
         if page > self.total_pages:
@@ -255,13 +280,13 @@ class MainPage(ttk.Frame):
 
         self.page_number = page
         table_name = self.selected_table
-        columns = ', '.join(self.selected_columns) or '*'
-        primary_key = 'GID'
-        page_size = 2
+        page_size = 20
         skip_rows = (self.page_number - 1) * page_size
         fetch_rows = page_size
-        print(f'{skip_rows=}, {fetch_rows=}\n', table_name, columns, primary_key, skip_rows, fetch_rows)
-        result = self.root.connection.get_paginated_results(table_name, columns, primary_key, skip_rows, fetch_rows)
+        self.primary_keys = [i[1] for i in self.root.connection.fetch_primary_key_details(table_name).values]
+        columns = ', '.join(self.primary_keys + self.selected_columns) if self.selected_columns else '*'
+        print(f'{skip_rows=}, {fetch_rows=}\n', table_name, columns, self.primary_keys, skip_rows, fetch_rows)
+        result = self.root.connection.get_paginated_results(table_name, columns, self.primary_keys[0], skip_rows, fetch_rows)
         if selected_table:
             self.table_columns = result.columns
             self.total_pages = math.ceil(self.root.connection.get_page_size(table_name).values[0]/page_size)
@@ -272,6 +297,7 @@ class MainPage(ttk.Frame):
 
     def update_treeview(self, title, headers, data):
         print('\n**Updating Treeview**\n', title, headers, data)
+        headers = ['Sr. NO.', *headers]
         self.tree.delete(*self.tree.get_children())
         self.tree["columns"] = headers
 
@@ -279,8 +305,8 @@ class MainPage(ttk.Frame):
             self.tree.heading(header, anchor=tk.W, text=header)
             self.tree.column(header, anchor=tk.W)
 
-        for row in data:
-            self.tree.insert("", "end", iid=row[0], values=[*row])
+        for index, row in enumerate(data):
+            self.tree.insert("", "end", iid=index, values=[index, *row])
     
     def validate(self):
         if not self.selected_table:
@@ -288,10 +314,137 @@ class MainPage(ttk.Frame):
             return False
         else:return True
 
-    def new_entry_wiegets(self):
+    def new_entry_widgets(self):
         self.tree_frame.grid_remove()
         self.manupulation_frame.grid()
-    
+
+
+        self.table_info = db_manager.fetch_table_details(self.selected_table)
+        self.action_label.configure(text=f"New Entry for {self.selected_table_name}")
+        column_details = db_manager.fetch_foreign_key_details(self.selected_table)
+        self.entry_details = []
+        for index in range(0, len(self.table_info.values), 2):
+            col = 0
+            for row in self.table_info.values[index : index + 2]:
+                info = ValueSetter(self.table_info.columns, row)
+                foreign_column_info = self.get_foreign_key_details(
+                    column_details, info.COLUMN_NAME
+                )
+                default_value = info.COLUMN_DEFAULT[2:-2] if info.COLUMN_DEFAULT else ""
+                info.entry_label = info.COLUMN_NAME
+                info.entry_properties = info
+                info.entry_foreign_properties = foreign_column_info
+                info.entry_default = default_value
+
+                label = ttk.Label(
+                    self.action_frame, text=info.COLUMN_NAME, style="Plane.TLabel"
+                )
+                label.grid(
+                    row=index, column=0 + col, sticky="new", padx=(0, 5), pady=(0, 5)
+                )
+
+                if foreign_column_info:
+                    info.entry_variable = tk.StringVar(value=default_value)
+                    vals = db_manager.fetch_table_data(foreign_column_info.PrimaryTable)
+                    foreign_key_values = [i[self.table_primary_key_index] for i in vals.values]
+                    entry = ttk.Combobox(
+                        self.action_frame,
+                        textvariable=info.entry_variable,
+                        values=foreign_key_values,
+                        state="readonly",
+                    )
+                    entry.grid(
+                        row=index,
+                        column=1 + col,
+                        sticky="new",
+                        padx=(0, 10),
+                        pady=(0, 5),
+                    )
+
+                elif info.HAS_IDENTITY=='YES':
+                    print('Name', info.COLUMN_NAME, 'Identity', info.HAS_IDENTITY)
+                    info.entry_variable = tk.StringVar(value=default_value)
+                    pass
+
+                elif info.DATA_TYPE == "int":
+                    info.entry_variable = tk.StringVar(value=default_value)
+                    entry = ttk.Entry(
+                        self.action_frame, textvariable=info.entry_variable
+                    )
+                    entry.grid(
+                        row=index,
+                        column=1 + col,
+                        sticky="new",
+                        padx=(0, 10),
+                        pady=(0, 5),
+                    )
+
+                elif info.DATA_TYPE == "bit":
+                    info.entry_variable = tk.StringVar(value=default_value)
+                    entry = ttk.Combobox(
+                        self.action_frame,
+                        textvariable=info.entry_variable,
+                        values=[1, 0],
+                        state="readonly",
+                    )
+                    entry.grid(
+                        row=index,
+                        column=1 + col,
+                        sticky="new",
+                        padx=(0, 10),
+                        pady=(0, 5),
+                    )
+
+                elif info.DATA_TYPE == "datetime" or info.DATA_TYPE == "date":
+                    print(default_value.split(' ')[0])
+                    info.entry_variable = tk.StringVar(value=default_value.split(' ')[0])
+                    entry = DateEntry(
+                        self.action_frame,
+                        width=12,
+                        borderwidth=2,
+                        date_pattern='y-mm-dd',
+                        textvariable=info.entry_variable,
+                    )
+                    entry.grid(
+                        row=index,
+                        column=1 + col,
+                        sticky="new",
+                        padx=(0, 10),
+                        pady=(0, 5),
+                    )
+
+                elif info.DATA_TYPE == "time":
+                    info.entry_variable = TimeEntry(
+                        self.action_frame, index, (1 + col), default_value
+                    )
+                else:
+                    info.entry_variable = tk.StringVar(value=default_value)
+                    entry = ttk.Entry(
+                        self.action_frame, textvariable=info.entry_variable
+                    )
+                    entry.grid(
+                        row=index,
+                        column=1 + col,
+                        sticky="new",
+                        padx=(0, 10),
+                        pady=(0, 5),
+                    )
+
+                self.entry_details.append(info)
+                col += 3
+
+            separator = ttk.Separator(self.action_frame, orient="vertical")
+            separator.grid(row=index, column=2, sticky="ns", padx=(0, 10), pady=(0, 5))
+
+
+
+
+
+
+
+
+
+
     def update_entry_widgets(self):
         self.tree_frame.grid_remove()
         self.manupulation_frame.grid()

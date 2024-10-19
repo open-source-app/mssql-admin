@@ -30,7 +30,7 @@ class MSSQLDatabase:
         return self.fetch_one_data(query, filters)
 
     def get_page_size(self, table_name):
-        query = f"SELECT COUNT(*) AS TotalRows FROM [{table_name}];" 
+        query = f"SELECT COUNT(*) AS TotalRows FROM [{table_name}];"
         return self.fetch_one_data(query, [])
 
     def fetch_lane_details(self):
@@ -92,7 +92,7 @@ class MSSQLDatabase:
     def fetch_primary_key_details(self, table_name):
         query = aq.primary_key_column
         filters = [table_name]
-        return self.fetch_one_data(query, filters)
+        return self.fetch_all_data(query, filters)
 
     def fetch_identity_details(self, table_name):
         query = aq.has_identity
