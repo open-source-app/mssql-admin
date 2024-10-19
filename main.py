@@ -285,8 +285,11 @@ class MainPage(ttk.Frame):
         fetch_rows = page_size
         self.primary_keys = [i[1] for i in self.root.connection.fetch_primary_key_details(table_name).values]
         columns = ', '.join(self.primary_keys + self.selected_columns) if self.selected_columns else '*'
-        print(f'{skip_rows=}, {fetch_rows=}\n', table_name, columns, self.primary_keys, skip_rows, fetch_rows)
-        result = self.root.connection.get_paginated_results(table_name, columns, self.primary_keys[0], skip_rows, fetch_rows)
+        self.info = self.root.connection.fetch_table_details(table_name)
+        sort_key = self.primary_keys[0] if self.primary_keys else self.table_columns[0] if self.table_columns else self.info.values[0][1]
+        print(f'{skip_rows=}, {fetch_rows=}\n{self.info.values=}, {self.info.columns=}\n', table_name, columns, self.primary_keys, skip_rows, fetch_rows)
+        result = self.root.connection.get_paginated_results(table_name, columns, sort_key, skip_rows, fetch_rows)
+        
         if selected_table:
             self.table_columns = result.columns
             self.total_pages = math.ceil(self.root.connection.get_page_size(table_name).values[0]/page_size)
@@ -307,7 +310,7 @@ class MainPage(ttk.Frame):
 
         for index, row in enumerate(data):
             self.tree.insert("", "end", iid=index, values=[index, *row])
-    
+
     def validate(self):
         if not self.selected_table:
             messagebox.showerror('Select Table', 'Please Select a Table')
