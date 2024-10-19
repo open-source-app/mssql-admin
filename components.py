@@ -130,11 +130,11 @@ class LoginPage(ttk.Frame):
         self.small_font = ("Helvetica", 10)
         self.small_bold_font = ("Helvetica", 10, "bold")
         
-        self.host_name_var = tk.StringVar(value='localhost')
-        self.port_var = tk.StringVar(value='3306')
-        self.user_name_var = tk.StringVar(value='shubham')
-        self.password_var = tk.StringVar(value='dubey')
-        self.db_name_var = tk.StringVar(value='TMS_Client')
+        self.host_name_var = tk.StringVar(value='')
+        self.port_var = tk.StringVar(value='')
+        self.user_name_var = tk.StringVar(value='')
+        self.password_var = tk.StringVar(value='')
+        self.db_name_var = tk.StringVar(value='')
 
         _label = ttk.Label( frame, text="Please Login", font=self.heading, background='white',)
         _label.grid(column=0, row=1, pady=(0, 20))
@@ -148,7 +148,7 @@ class LoginPage(ttk.Frame):
         host_combobox = ttk.Combobox(
                 frame,
                 textvariable=self.host_name_var,
-                values=[users for users in self.config.get('Users', [])],
+                values=[users for users in self.config.get('hosts', [])],
                 )
         host_combobox.bind("<<ComboboxSelected>>", self.select_host)
         host_combobox.grid(column=0, row=3, sticky="we", pady=(0, 10))
@@ -177,8 +177,13 @@ class LoginPage(ttk.Frame):
 
         label = ttk.Label( frame, text="DataBase Name :", font=self.small_bold_font, background="white",)
         label.grid(column=0, row=10, sticky="w")
-        entry = ttk.Entry( frame, width=26, textvariable=self.db_name_var, font=("Helvetica", 9), background="white",)
-        entry.grid(column=0, row=11, sticky="we", pady=(0, 10))
+        self.db_combobox = ttk.Combobox(
+                frame,
+                textvariable=self.db_name_var,
+                values=[],
+                )
+        self.db_combobox.bind("<<ComboboxSelected>>", self.select_user)
+        self.db_combobox.grid(column=0, row=11, sticky="we", pady=(0, 10))
 
         self.login_button = ttk.Button( frame, style="Custom.TButton", text="Login", compound="left", command=self.login,)
         self.login_button.grid(column=0, row=12, pady=(0, 20))
@@ -187,19 +192,21 @@ class LoginPage(ttk.Frame):
         self.info_label.grid(column=0, row=13, sticky="w", pady=(0, 10))
 
     def select_host(self, event=None):
-        users = self.config.get("Users")
-        if users:
-            hosts = users.get(self.host_name_var.get())
-            self.port_var.set(hosts.get('port', ''))
-            users = [user for user in hosts.get('details', [])]
+        hosts = self.config.get("hosts")
+        if hosts:
+            host = hosts.get(self.host_name_var.get())
+            self.port_var.set(host.get('port', ''))
+            users = [user for user in host.get('details', [])]
             self.user_combobox.config(value=users)
+            self.user_combobox.focus_set()
 
     def select_user(self, event=None):
-        if self.config.get('Users'):
-            for user, details in self.config.get('Users').get(self.host_name_var.get()).get('details').items():
+        if self.config.get('hosts'):
+            for user, details in self.config.get('hosts').get(self.host_name_var.get()).get('details').items():
                 if user == self.user_name_var.get():
-                    self.db_name_var.set(details.get('db_name', ''))
                     self.password_var.set(details.get('password', ''))
+                    self.db_combobox.config(value=details.get('databases', []))
+                    self.db_combobox.focus_set()
 
     def login(self, event=None):
         host_name = self.host_name_var.get()
@@ -209,33 +216,37 @@ class LoginPage(ttk.Frame):
         db_name = self.db_name_var.get()
         print(host_name, port, user_name, password, db_name) 
         if all((host_name, port, user_name, password, db_name)):
-            self.config = {
-                    **self.config,
-                    "Users": {
-                        **self.config.get('Users', {}),
-                        self.host_name_var.get(): {
-                            'port': self.port_var.get(),
-                            'details': 
-                                {
-                                    **self.config.get('Users', {}).get(self.host_name_var.get(),{}).get('details', {}),
-                                    self.user_name_var.get(): {
-                                        **self.config.get('Users', {}).get(self.host_name_var.get(),{}).get('details', {}).get(self.user_name_var.get(), {}),
-                                        'db_name': self.db_name_var.get(),
-                                        'password': self.password_var.get()
-                                    }
-                                }
-                            }
-                        }
-                    }
-            print(self.config)
-            with open('config.json', 'w') as f:
-                json.dump(self.config, f)
+            self.save_connection_details(host_name, port, user_name, password, db_name) 
             self.login_button.config(state='disabled')
             value = self.on_login_success(host_name, port, user_name, password, db_name)
             self.login_button.config(state='Normal')
             self.info_label.config(text=value)
         else:
             self.info_label.config(text='Enter All the Details')
+
+    def save_connection_details(self, host_name, port, user_name, password, db_name):
+        self.config = {
+                **self.config,
+                "hosts": {
+                    **self.config.get('hosts', {}),
+                    host_name: {
+                        'port': port,
+                        'details': {
+                            **self.config.get('hosts', {}).get(host_name, {}).get('details', {}),
+                            user_name: {
+                                **self.config.get('hosts', {}).get(host_name, {}).get('details', {}).get(user_name, {}),
+                                'password': password,
+                                'databases': list({
+                                    *self.config.get('hosts', {}).get(host_name, {}).get('details', {}).get(user_name, {}).get('databases', []),
+                                    db_name
+                                    })
+                                }
+                            }
+                        }
+                    }
+                }
+        with open('config.json', 'w') as f:
+            json.dump(self.config, f, indent=2)  # Use indent for better readability
 
 class ColumnSelectionWindow(tk.Toplevel):
     def __init__( self, parent, notification_type="warning", title="APL Techno"):
