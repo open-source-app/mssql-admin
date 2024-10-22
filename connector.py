@@ -1,7 +1,7 @@
 import env_file
 import datetime
 import pyodbc
-from models import Objectify
+from models import Objectifier as Objectify
 import queries as aq
 
 
@@ -19,12 +19,12 @@ class MSSQLDatabase:
         except pyodbc.Error as err:
             print(f"Error connecting to MSSQL: {err}")
 
-    def fetch_tables(self):
+    def fetch_table_names(self):
         query = aq.tables
         filters = []
         return self.fetch_all_data(query, filters)
 
-    def get_page_size(self, table_name):
+    def fetch_row_count(self, table_name):
         query = f"SELECT COUNT(*) AS TotalRows FROM [{table_name}];"
         return self.fetch_one_data(query, [])
 
@@ -32,11 +32,6 @@ class MSSQLDatabase:
         query = aq.table_info
         filters = [table_name]
         return self.fetch_all_data(query, filters)
-
-    def fetch_row_details(self, table_name, primary_key, row_id):
-        query = f"SELECT TOP 1 * FROM [{table_name}] WHERE [{primary_key}]=?;"
-        filters = [row_id]
-        return self.fetch_one_data(query, filters)
 
     def fetch_primary_key_details(self, table_name):
         query = aq.primary_key_column
@@ -51,6 +46,11 @@ class MSSQLDatabase:
     def fetch_identity_details(self, table_name):
         query = aq.has_identity
         filters = [table_name]
+        return self.fetch_one_data(query, filters)
+
+    def fetch_identity_details(self, table_name):
+        query = f'SELECT IDENT_CURRENT({table_name});'
+        filters = []
         return self.fetch_one_data(query, filters)
 
     def get_paginated_results(self, table_name, columns, order_key, skip_rows, fetch_rows):

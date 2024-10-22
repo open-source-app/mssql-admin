@@ -2,9 +2,27 @@ import math
 import tkinter as tk
 from tkinter import ttk, messagebox
 from settings import center_window, full_path
-from components import LoginPage, ComponentStyle, ColumnSelectionWindow
-from models import CustomLogger
+from components import ( 
+                        LoginPage,
+                        ComponentStyle,
+                        ColumnSelectionWindow,
+                        DateWidget,
+                        DateTimeWidget,
+                        TimeWidget, StringWidget,
+                        IntegerWidget,
+                        BinaryWidget,
+                        BooleanWidget,
+                        FloatWidget,
+                        JsonWidget, 
+                        XmlWidget, 
+                        UUIDWidget,
+                        GeometryWidget, 
+                        GeographyWidget,
+                        ImageWidget,
+                        )
+from models import CustomLogger, ValueSetter
 from connector import MSSQLDatabase
+
 
 class DBManager(tk.Tk):
     def __init__(self, *args, **kwargs):
@@ -51,6 +69,11 @@ class MainPage(ttk.Frame):
         self.selected_columns=[]
         self.table_columns=[]
 
+        self.list_view = False
+        self.entry_view = False
+        self.update_view = False
+        self.delete_view = False
+
         submenu = tk.Menu(menu_bar, tearoff=0)
         menu_bar.add_cascade(label="Action", menu=submenu)
         menu_bar.add_command(label="Logout", command=self.root.show_login_page)
@@ -80,17 +103,27 @@ class MainPage(ttk.Frame):
         self.create_tree_frame(self.tree_frame)
         #self.tree_frame.grid_remove()
 
-        self.manupulation_frame = ttk.Frame(self, style="Primary.TFrame")
-        self.manupulation_frame.grid(row=1, column=0, sticky="nwes", padx=5, pady=5)
-        self.manupulation_frame.rowconfigure(0, weight=1)
-        self.manupulation_frame.columnconfigure(0, weight=1)
-        self.manupulation_frame.grid_remove()
+        self.manipulation_frame = ttk.Frame(self, style="Primary.TFrame")
+        self.manipulation_frame.grid(row=1, column=0, sticky="nwes", padx=5, pady=5)
+        self.manipulation_frame.columnconfigure(1, weight=1)
+        self.manipulation_frame.columnconfigure(3, weight=1)
+        self.manipulation_frame.grid_remove()
 
         self.export_frame = ttk.Frame(self, style="Primary.TFrame")
         self.export_frame.grid(row=2, column=0, sticky="nwes", padx=5, pady=5)
         self.export_frame.rowconfigure(0, weight=1)
         self.export_frame.columnconfigure(0, weight=1)
-    
+
+    def reset_all(self):
+        self.list_view = False
+        self.entry_view = False
+        self.update_view = False
+        self.delete_view = False
+        self.column_button.config(state='disabled')
+        self.new_button.config(state='disabled')
+        self.update_button.config(state='disabled')
+        self.delete_button.config(state='disabled')
+
     def table_mode(self):
         self.query_mode_frame.grid_remove()
         self.table_mode_frame.grid()
@@ -102,9 +135,9 @@ class MainPage(ttk.Frame):
     def create_table_mode_frame(self, frame):
         self.selected_table_var = tk.StringVar(value='')
         self.selected_table = None
-        self.tables = self.root.connection.fetch_tables()
+        self.tables = self.root.connection.fetch_table_names()
         table_label = ttk.Label(
-                frame, style="Main.TLabel", text="Select Table : "
+                frame, style="Normal_Bold.TLabel", text="Select Table : "
                 
         )
         table_label.grid(row=0, column=0, sticky="nwes", padx=0, pady=0)
@@ -124,28 +157,29 @@ class MainPage(ttk.Frame):
 
 
         table_label = ttk.Label(
-                frame, style="Main.TLabel", text="Select Columns : "
+                frame, style="Normal_Bold.TLabel", text="Select Columns : "
         )
         table_label.grid(row=2, column=0, sticky="w", pady=(5,0))
 
 
-        column_button = ttk.Button( frame, text="Filter Columns", style="Bold.TButton", command=lambda:ColumnSelectionWindow(self, notification_type="info") ) 
-        column_button.grid(row=2, column=1, sticky="we", pady=(5,0))
+        self.column_button = ttk.Button(
+                frame,
+                text="Filter Columns",
+                style="Bold.TButton",
+                state='disabled',
+                command=lambda:ColumnSelectionWindow(self, notification_type="info")
+                ) 
+        self.column_button.grid(row=2, column=1, sticky="we", pady=(5,0))
 
         self.new_button = ttk.Button(
-            frame, text="New Entry", style="Bold.TButton", command=self.new_entry_widgets
+            frame, text="New Entry", style="Bold.TButton", state='disabled', command=self.new_entry_widgets
         )
         self.new_button.grid(row=2, column=2, sticky="we", pady=(5,0))
 
-        self.update_button = ttk.Button( frame, text="Update Entry", style="Bold.TButton", command=self.update_entry_widgets,)
+        self.update_button = ttk.Button( frame, text="Update Entry", state='disabled', style="Bold.TButton", command=self.update_entry_widgets,)
         self.update_button.grid(row=2, column=3, sticky="we", pady=(5,0))
 
-        self.delete_button = ttk.Button(
-            frame,
-            text="Delete Entries",
-            style="Bold.TButton",
-            command=self.delete_rows,
-        )
+        self.delete_button = ttk.Button(frame, text="Delete Entries", state='disabled', style="Bold.TButton", command=self.delete_rows,)
         self.delete_button.grid(row=2, column=4, sticky="we", pady=(5,0))
 
     def create_query_mode_frame(self, frame):
@@ -164,7 +198,7 @@ class MainPage(ttk.Frame):
         action_frame.columnconfigure(0, weight=1)
 
         query_label = ttk.Label(
-            option_frame, style="Main.TLabel", text="Raw Query"
+            option_frame, style="Normal_Bold.TLabel", text="Raw Query"
         )
         query_label.pack(pady=(0, 5), side='left')
 
@@ -208,22 +242,22 @@ class MainPage(ttk.Frame):
         self.cancel_button.grid(row=1, column=1, sticky="we")    
 
         self.previous_button = ttk.Button(
-                frame, text="< Previous", style="Bold.TButton", command=self.get_previous_page
+                frame, text="< Previous", state='disabled', style="Bold.TButton", command=self.get_previous_page
                 )
         self.previous_button.grid(row=1, column=0, sticky="we")    
  
         self.page_number_label = ttk.Label(
-                frame, style="Main.TLabel", text="", justify='center', anchor='c'
+                frame, style="Normal.TLabel", text="", justify='center', anchor='c'
             )
         self.page_number_label.grid(row=1, column=1, sticky="we")
                 
         self.next_button = ttk.Button(
-            frame, text="Next >", style="Bold.TButton", command=self.get_next_page
+            frame, text="Next >", style="Bold.TButton", state='disabled', command=self.get_next_page
         )
         self.next_button.grid(row=1, column=2, sticky="we")
 
         specific_label = ttk.Label(
-                frame, style="Main.TLabel", text="Enter Page Number", justify='center', anchor='c'
+                frame, style="Normal.TLabel", text="Enter Page Number", justify='center', anchor='c'
             )
         specific_label.grid(row=2, column=0, sticky="we")
  
@@ -231,7 +265,7 @@ class MainPage(ttk.Frame):
         self.specific_page_entry.grid(row=2, column=1, sticky="we")
         
         self.specific_page_button = ttk.Button(
-            frame, text="Get Page", style="Bold.TButton", command=self.get_specific_page
+            frame, text="Get Page", style="Bold.TButton", state='disabled', command=self.get_specific_page
         )
         self.specific_page_button.grid(row=2, column=2, sticky="we")   
     
@@ -257,7 +291,6 @@ class MainPage(ttk.Frame):
     def get_previous_page(self):
         page = self.page_number - 1
         if page<1:
-            print(dir(messagebox))
             messagebox.showerror('Min page reached', 'Min Page Reached')
             return
         self.show_selected_columns(page=page)
@@ -266,40 +299,51 @@ class MainPage(ttk.Frame):
         result = self.root.connection.fetch_table_data(self.selected_table)
         self.selected_columns = []
         self.table_columns = result.columns
-        self.manupulation_frame.grid_remove()
+        self.manipulation_frame.grid_remove()
         self.tree_frame.grid()
         self.update_treeview("Showing All Entries", result.columns, result.values)
 
     def show_selected_columns(self, selected_table=None, page=1):
+        self.page_number = page
+        page_size = 20
+
         if selected_table:
             self.selected_columns = []
             self.selected_table = selected_table
+            self.primary_keys = [i[1] for i in self.root.connection.fetch_primary_key_details(selected_table).values]
+            info = self.root.connection.fetch_table_details(selected_table)
+            print(f'\n{info.columns=}\n{info.values}\n\n')
+            self.table_info = {detail[1]: ValueSetter(info.columns, detail) for detail in info.values}
+            self.table_columns = list(self.table_info.keys())
+            self.total_pages = math.ceil(self.root.connection.fetch_row_count(selected_table).values[0]/page_size)
 
         if not self.validate():
             return
 
-        self.page_number = page
         table_name = self.selected_table
-        page_size = 20
         skip_rows = (self.page_number - 1) * page_size
         fetch_rows = page_size
-        self.primary_keys = [i[1] for i in self.root.connection.fetch_primary_key_details(table_name).values]
-        columns = ', '.join(self.primary_keys + self.selected_columns) if self.selected_columns else '*'
-        self.info = self.root.connection.fetch_table_details(table_name)
-        sort_key = self.primary_keys[0] if self.primary_keys else self.table_columns[0] if self.table_columns else self.info.values[0][1]
-        print(f'{skip_rows=}, {fetch_rows=}\n{self.info.values=}, {self.info.columns=}\n', table_name, columns, self.primary_keys, skip_rows, fetch_rows)
+        columns = ', '.join(set(self.primary_keys + self.selected_columns)) if self.selected_columns else '*'
+        sort_key = self.primary_keys[0] if self.primary_keys else self.table_columns[0]
+
         result = self.root.connection.get_paginated_results(table_name, columns, sort_key, skip_rows, fetch_rows)
-        
-        if selected_table:
-            self.table_columns = result.columns
-            self.total_pages = math.ceil(self.root.connection.get_page_size(table_name).values[0]/page_size)
-        self.manupulation_frame.grid_remove()
-        self.page_number_label.config(text=f'{self.page_number} / {self.total_pages}')
+
+        self.manipulation_frame.grid_remove()
         self.tree_frame.grid()
+        self.page_number_label.config(text=f'{self.page_number} / {self.total_pages}')
         self.update_treeview("Showing Selected Columns Entries", result.columns, result.values)
 
+        
+        if self.page_number+1 > self.total_pages:
+            self.next_button.config(state='disabled')
+        else:
+            self.next_button.config(state='normal')
+        if self.page_number-1<1:
+            self.previous_button.config(state='disabled')
+        else:
+            self.previous_button.config(state='normal')
+
     def update_treeview(self, title, headers, data):
-        print('\n**Updating Treeview**\n', title, headers, data)
         headers = ['Sr. NO.', *headers]
         self.tree.delete(*self.tree.get_children())
         self.tree["columns"] = headers
@@ -319,9 +363,93 @@ class MainPage(ttk.Frame):
 
     def new_entry_widgets(self):
         self.tree_frame.grid_remove()
-        self.manupulation_frame.grid()
+        self.clean_manipulation_frame()
+        self.manipulation_frame.grid()
 
+        label = ttk.Label(self.manipulation_frame, text=f'New Entry for {self.selected_table}', style="Heading.TLabel")
+        label.grid(row=0, column=0, columnspan=3, sticky="new", padx=(0, 5), pady=(0, 5))
+        
+        self.column_details_for_entry = [
+                column for key, column in self.table_info.items()
+                if (
+                    key in set(self.primary_keys + self.selected_columns)
+                    or column.IS_NULLABLE == 'NO')
+                and column.HAS_IDENTITY == 'NO'
+                ]
+        for key, column in self.table_info.items():
+            print(f'''
+            {key} ->
+            --------
+            DATA_TYPE - {column.DATA_TYPE},
+            IS_NULLABLE {column.IS_NULLABLE},
+            HAS_IDENTITY - {column.HAS_IDENTITY},
+            CHARACTER_MAXIMUM_LENGTH - {column.CHARACTER_MAXIMUM_LENGTH},
+            NUMERIC_SCALE - {column.NUMERIC_SCALE},
+            NUMERIC_PRECISION - {column.NUMERIC_PRECISION},
+            COLUMN_DEFAULT - {column.COLUMN_DEFAULT},
+            IDENTITY_SEED - {column.IDENTITY_SEED},
+            IDENTITY_INCREMENT - {column.IDENTITY_INCREMENT},
+            IsComputed - {column.IsComputed},
+            ComputedColumnDefinition - {column.ComputedColumnDefinition},
+            HasDefaultConstraint - {column.HasDefaultConstraint},
+            DefaultConstraintDefinition - {column.DefaultConstraintDefinition},
+            ForeignKey - {column.ForeignKey},
+            PrimaryTable - {column.PrimaryTable},
+            PrimaryColumn - {column.PrimaryColumn}
+            \n'''
+                  )
+        for index, column_detail in enumerate(self.column_details_for_entry, 2):
+            
+            label_text = f"{column_detail.COLUMN_NAME} {'*' if column_detail.IS_NULLABLE == 'NO' else ''}"
+            label = ttk.Label(self.manipulation_frame, text=label_text, style="Small_Bold.TLabel")
+            label.grid(row=index//2, column=(2 if index%2 else 0), sticky="new", padx=(0, 5), pady=(0, 5))
 
+            entry = self.get_widget_for_data_type(self.manipulation_frame, column_detail)
+            entry.grid(row=index//2, column=(3 if index%2 else 1), sticky="new", padx=(0, 50), pady=(0, 5))
+
+        return
+
+    def get_widget_for_data_type(self, frame, column_details):
+        data_type = column_details.DATA_TYPE.lower()
+
+        string_types = ['char', 'varchar', 'nchar', 'nvarchar', 'text']
+        binary_types = ['binary', 'varbinary']
+        integer_types = ['tinyint', 'smallint', 'int', 'bigint']
+        float_types = ['decimal', 'numeric', 'smallmoney', 'money', 'float', 'real']
+        datetime_types = ['datetime', 'smalldatetime', 'datetime2', 'datetimeoffset']
+
+        if data_type in string_types:
+            return StringWidget(frame, column_details)
+        elif data_type in integer_types:
+            return IntegerWidget(frame, column_details)
+        elif data_type in float_types:
+            return FloatWidget(frame, column_details)
+        elif data_type in binary_types:
+            return BinaryWidget(frame, column_details)
+        elif data_type in datetime_types:
+            return DateTimeWidget(frame, column_details)
+        elif data_type == 'bit':
+            return BooleanWidget(frame, column_details)
+        elif data_type == 'date':
+            return DateWidget(frame, column_details)
+        elif data_type == 'time':
+            return TimeWidget(frame, column_details)
+        elif data_type == 'uniqueidentifier':
+            return UUIDWidget(frame, column_details)
+        elif data_type == 'xml':
+            return XmlWidget(frame, column_details)
+        elif data_type == 'json':
+            return JsonWidget(frame, column_details)
+        elif data_type == 'geography':
+            return GeographyWidget(frame, column_details)
+        elif data_type == 'geometry':
+            return GeometryWidget(frame, column_details)
+        elif data_type == 'image':
+            return ImageWidget(frame, column_details)
+        else:
+            return StringWidget(frame, column_details)
+
+    def temporary(self):
         self.table_info = db_manager.fetch_table_details(self.selected_table)
         self.action_label.configure(text=f"New Entry for {self.selected_table_name}")
         column_details = db_manager.fetch_foreign_key_details(self.selected_table)
@@ -330,9 +458,7 @@ class MainPage(ttk.Frame):
             col = 0
             for row in self.table_info.values[index : index + 2]:
                 info = ValueSetter(self.table_info.columns, row)
-                foreign_column_info = self.get_foreign_key_details(
-                    column_details, info.COLUMN_NAME
-                )
+                foreign_column_info = self.get_foreign_key_details(column_details, info.COLUMN_NAME)
                 default_value = info.COLUMN_DEFAULT[2:-2] if info.COLUMN_DEFAULT else ""
                 info.entry_label = info.COLUMN_NAME
                 info.entry_properties = info
@@ -450,7 +576,7 @@ class MainPage(ttk.Frame):
 
     def update_entry_widgets(self):
         self.tree_frame.grid_remove()
-        self.manupulation_frame.grid()
+        self.manipulation_frame.grid()
 
     def delete_rows(self):
         ...
@@ -462,12 +588,20 @@ class MainPage(ttk.Frame):
         ...
 
     def select_table(self, event=None):
+        self.column_button.config(state='normal')
+        self.new_button.config(state='normal')
+        self.update_button.config(state='normal')
+        self.delete_button.config(state='normal')
         self.show_selected_columns(selected_table=self.selected_table_var.get())
     
     def get_selected_columns(self, selected_columns):
         self.selected_columns = selected_columns
         print(f'{self.selected_columns=}')
         self.show_selected_columns()
+    
+    def clean_manipulation_frame(self):
+        for widget in self.manipulation_frame.winfo_children():
+            widget.destroy()
 
 if __name__ == '__main__':
     DBManager()

@@ -8,3 +8,7 @@ TMS*
 data
 __pycache__
 config.json
+features.txt
+test.txt
+test.py
+bugs.txt

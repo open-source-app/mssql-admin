@@ -1,46 +1,61 @@
 
-tables = """SELECT TABLE_NAME
-FROM INFORMATION_SCHEMA.TABLES
-WHERE TABLE_TYPE = 'BASE TABLE'
-  AND TABLE_NAME NOT LIKE 'sys%'
-  AND TABLE_NAME NOT LIKE 'MS%';"""
+tables = """
+    SELECT TABLE_NAME
+    FROM INFORMATION_SCHEMA.TABLES
+    WHERE TABLE_TYPE = 'BASE TABLE'
+      AND TABLE_NAME NOT LIKE 'sys%'
+      AND TABLE_NAME NOT LIKE 'MS%';
+      """
 
 table_info = """
-SELECT 
-    c.TABLE_NAME,
-    c.COLUMN_NAME,
-    c.DATA_TYPE,
-    c.CHARACTER_MAXIMUM_LENGTH,
-    c.IS_NULLABLE,
-    c.COLUMN_DEFAULT,
-    CASE 
-        WHEN ic.column_id IS NOT NULL THEN 'YES' ELSE 'NO'
-    END AS HAS_IDENTITY,
-    CAST(ic.SEED_VALUE AS NVARCHAR(255)) AS IDENTITY_SEED,
-    CAST(ic.INCREMENT_VALUE AS NVARCHAR(255)) AS IDENTITY_INCREMENT,
-    CASE 
-        WHEN cc.column_id IS NOT NULL THEN 'YES' ELSE 'NO'
-    END AS IsComputed,
-    CAST(cc.definition AS NVARCHAR(MAX)) AS ComputedColumnDefinition,
-    CASE 
-        WHEN dc.definition IS NOT NULL THEN 'YES' ELSE 'NO'
-    END AS HasDefaultConstraint,
-    CAST(dc.definition AS NVARCHAR(MAX)) AS DefaultConstraintDefinition
-FROM 
-    INFORMATION_SCHEMA.COLUMNS c
-LEFT JOIN 
-    sys.tables t ON c.TABLE_NAME = t.name AND t.schema_id = SCHEMA_ID(c.TABLE_SCHEMA)
-LEFT JOIN 
-    sys.columns sc ON t.object_id = sc.object_id AND c.COLUMN_NAME = sc.name
-LEFT JOIN 
-    sys.identity_columns ic ON sc.object_id = ic.object_id AND sc.column_id = ic.column_id
-LEFT JOIN 
-    sys.computed_columns cc ON sc.object_id = cc.object_id AND sc.column_id = cc.column_id
-LEFT JOIN 
-    sys.default_constraints dc ON sc.default_object_id = dc.object_id
-WHERE 
-    c.TABLE_NAME = ?;"""
-
+    SELECT 
+        c.TABLE_NAME,
+        c.COLUMN_NAME,
+        c.DATA_TYPE,
+        c.CHARACTER_MAXIMUM_LENGTH,
+        c.NUMERIC_PRECISION,
+        c.NUMERIC_SCALE,
+        c.IS_NULLABLE,
+        c.COLUMN_DEFAULT,
+        CASE 
+            WHEN ic.column_id IS NOT NULL THEN 'YES' ELSE 'NO'
+        END AS HAS_IDENTITY,
+        CAST(ic.SEED_VALUE AS NVARCHAR(255)) AS IDENTITY_SEED,
+        CAST(ic.INCREMENT_VALUE AS NVARCHAR(255)) AS IDENTITY_INCREMENT,
+        CASE 
+            WHEN cc.column_id IS NOT NULL THEN 'YES' ELSE 'NO'
+        END AS IsComputed,
+        CAST(cc.definition AS NVARCHAR(MAX)) AS ComputedColumnDefinition,
+        CASE 
+            WHEN dc.definition IS NOT NULL THEN 'YES' ELSE 'NO'
+        END AS HasDefaultConstraint,
+        CAST(dc.definition AS NVARCHAR(MAX)) AS DefaultConstraintDefinition,
+        fk.name AS ForeignKey,
+        tp.name AS PrimaryTable,
+        cp.name AS PrimaryColumn
+    FROM 
+        INFORMATION_SCHEMA.COLUMNS c
+    LEFT JOIN 
+        sys.tables t ON c.TABLE_NAME = t.name AND t.schema_id = SCHEMA_ID(c.TABLE_SCHEMA)
+    LEFT JOIN 
+        sys.columns sc ON t.object_id = sc.object_id AND c.COLUMN_NAME = sc.name
+    LEFT JOIN 
+        sys.identity_columns ic ON sc.object_id = ic.object_id AND sc.column_id = ic.column_id
+    LEFT JOIN 
+        sys.computed_columns cc ON sc.object_id = cc.object_id AND sc.column_id = cc.column_id
+    LEFT JOIN 
+        sys.default_constraints dc ON sc.default_object_id = dc.object_id
+    LEFT JOIN 
+        sys.foreign_key_columns AS fkc ON sc.object_id = fkc.parent_object_id AND sc.column_id = fkc.parent_column_id
+    LEFT JOIN 
+        sys.foreign_keys AS fk ON fkc.constraint_object_id = fk.object_id
+    LEFT JOIN 
+        sys.tables AS tp ON fkc.referenced_object_id = tp.object_id
+    LEFT JOIN 
+        sys.columns AS cp ON fkc.referenced_object_id = cp.object_id AND fkc.referenced_column_id = cp.column_id
+    WHERE 
+        c.TABLE_NAME = ?;
+    """
 
 foreign_keys = """SELECT 
     fk.name AS ForeignKey,
@@ -121,3 +136,4 @@ INNER JOIN
     sys.index_columns AS fkic ON fkidx.object_id = fkic.object_id AND fkidx.index_id = fkic.index_id AND fkic.column_id = cf.column_id
 WHERE 
     tf.name = ?;"""
+

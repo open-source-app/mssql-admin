@@ -1,11 +1,13 @@
 import json
-from tkinter import ttk
+import datetime
+from PIL import Image
+from tkinter import ttk, filedialog, messagebox
+from tkcalendar import DateEntry
 import threading
 import tkinter as tk
-from models import TkImages, ValueSetter, TransactionData,CustomLogger, CustomImages
-from pymodbus.client import ModbusTcpClient
+import xml.etree.ElementTree as ET
+from models import TkImages, ValueSetter, CustomLogger, CustomImages
 from settings import center_window, full_path
-from ping3 import ping
 
 
 class Header:
@@ -125,7 +127,7 @@ class LoginPage(ttk.Frame):
         frame.columnconfigure(0, weight=1)
         frame.grid(column=1, row=0, sticky="wne", pady=(50), padx=20, ipadx=20)
 
-        self.heading = ("Helvetica", 16, "bold")
+        self.heading = ("Helvetica", 14, "bold")
         self.normal_font = ("Helvetica", 12)
         self.small_font = ("Helvetica", 10)
         self.small_bold_font = ("Helvetica", 10, "bold")
@@ -296,330 +298,713 @@ class ColumnSelectionWindow(tk.Toplevel):
         self.grab_release()
         self.destroy()
 
-class FleetWindow(tk.Toplevel):
-    def __init__( self, parent, vehicle_count_var, notification_type="warning", title="APL Techno", image="setup.png", subsample=5):
-        super().__init__(parent)
-        self.parent = parent
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
-        center_window(self, 400, 400, top=False)
+class CustomComboBoxWidget(ttk.Combobox):
+    def __init__(self, *args, primary_key='', **kwargs):
+        self.primary_key = primary_key
+        super().__init__(*args, **kwargs)
+        self.objects_dict = {str(getattr(obj, obj._id)): obj for obj in kwargs.get('values')} 
+        print(self.objects_dict)
+    
+    def get_object(self):
+        return self.objects_dict.get(str(self.get()))
+    
+    def get_value(self):
+        obj = self.get_object()
+        if obj:
+            return getattr(obj, self.primary_key)
+        else: return obj
 
-        def dismiss(event=None):
-            self.grab_release()
-            self.destroy()
-            self.parent.transaction.fleet = False
-            self.parent.status_panel.modbus_devices.barrier.write(value=0)
-            self.parent.status_panel.modbus_devices.traffic_light.write(value=0)
+class DateWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.variable = tk.StringVar()
+        self.entry = DateEntry(frame, date_pattern='y-mm-dd', width=12, borderwidth=2,)
 
-        self.focus_set()
+    def get_value(self):
+        return self.entry.get_date()
 
-        self.parent.status_panel.modbus_devices.barrier.write(value=1)
-        self.parent.status_panel.modbus_devices.traffic_light.write(value=1)
+    def grid(self, *args, **kwargs):
+        self.entry.grid(*args, **kwargs)
 
-        self.protocol("WM_DELETE_WINDOW", dismiss)
-        self.iconbitmap(full_path("warning.ico"))
-        self.title("Passing Fleet/Convoy")
+    def validate(self):
+        value = self.get_value()
+        try:
+            parsed_date = datetime.strptime(value, '%Y-%m-%d')
+            min_date = datetime(1753, 1, 1)
+            max_date = datetime(9999, 12, 31)
 
-        main_frame = ttk.Frame(self, style="Plane.TFrame")
-        main_frame.grid(column=0, row=0, sticky="wnes")
-        main_frame.columnconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
+            if not (min_date <= parsed_date <= max_date):
+                return False, f"Date must be between {min_date.date()} and {max_date.date()}."
+        except ValueError:
+            return False, "Invalid date format. Use YYYY-MM-DD."
+        return True, "Valid."
 
-        main_frame.rowconfigure(0, weight=1)
-        main_frame.rowconfigure(1, weight=1)
-        main_frame.rowconfigure(2, weight=1)
+class TimeWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.variable = tk.StringVar()
 
-        ttk.Label(
-            main_frame,
-            text="Fleet Passing",
-            font=("Helvetica", 14, "bold"),
-            background="white",
-            padding=5,
-        ).grid(column=0, row=0, columnspan=2)
-        image = CustomImages(active_image="passing_fleet.png", subsample=2)
-
-        show_image = ttk.Label(
-            main_frame, font=("Helvetica", 12, "bold"), background="white", padding=0
-        )
-        show_image.grid(column=0, row=1, columnspan=2)
-        show_image.image = image.get_active_image
-        show_image.config(image=show_image.image)
-
-        ttk.Label(
-            main_frame,
-            text="Vehicle Count : ",
-            font=("Helvetica", 12, "bold"),
-            background="white",
-            padding=5,
-        ).grid(column=0, row=2, sticky="e")
-        ttk.Label(
-            main_frame,
-            textvariable=vehicle_count_var,
-            font=("Helvetica", 12, "bold"),
-            background="white",
-            padding=5,
-        ).grid(column=1, row=2, sticky="w")
-
-        self.wait_visibility()
-        self.grab_set()
-        self.wait_window()
-
-class VehiclePanel(ttk.Frame):
-    def __init__(self, parent, column, row, colspan, rowspan):
-        self.parent = parent
-        super().__init__(parent, style="Primary.TFrame")
-        self.grid(column=column, row=row, columnspan=colspan, rowspan=rowspan, sticky="nwes", padx=(0,2), ipadx=(3), ipady=(3))
-
-        self.rowconfigure(0, weight=0)
-        self.rowconfigure(1, weight=0)
-        self.rowconfigure(2, weight=1)
-        self.columnconfigure(0, weight=1)
-
-        heading = ttk.Label(
-            self, text="Vehicle Details", justify="left", style="Main.TLabel"
-        )
-        heading.grid(column=0, row=0, columnspan=3, sticky="we")
-
-        vehicle_details_frame = ttk.Frame(self, style="Plane.TFrame")
-        vehicle_details_frame.grid(
-            column=0, row=1, columnspan=1, rowspan=1, padx=5, pady=5, sticky="nwes"
-        )
-        vehicle_details_frame.columnconfigure(0, weight=1)
-        vehicle_details_frame.columnconfigure(1, weight=1)
-
-        ttk.Label(
-            vehicle_details_frame, text="Vehicle Number", style="Primary.TLabel"
-        ).grid(column=0, row=0, sticky="w", pady=(0, 5))
-        self.vehicle_number_entry = ttk.Entry(
-            vehicle_details_frame,
-            textvariable=self.parent.vehicle_number_var,
-            foreground="#B7950B",
-            background="white",
-            font=("Helvetica", 13, "bold"),
-        )
-        self.vehicle_number_entry.grid(
-            column=1, row=0, columnspan=2, sticky="e", pady=(0, 5)
-        )
-
-        ttk.Label(
-            vehicle_details_frame, text="Selected Vehicle Class", style="Primary.TLabel"
-        ).grid(column=0, row=1, sticky="w", pady=(0, 5))
-        ttk.Label(
-            vehicle_details_frame,
-            textvariable=self.parent.vehicle_class_var,
-            style="Secondary.TLabel",
-        ).grid(column=1, row=1, columnspan=2, sticky="e", pady=(0, 5))
-
-        ttk.Label(
-            vehicle_details_frame, text="Journey Class", style="Primary.TLabel"
-        ).grid(column=0, row=2, sticky="w", pady=(0, 5))
-        ttk.Label(
-            vehicle_details_frame,
-            textvariable=self.parent.journey_class_var,
-            style="Secondary.TLabel",
-        ).grid(column=1, row=2, columnspan=2, sticky="e", pady=(0, 5))
-
-        ttk.Label(
-            vehicle_details_frame, text="Exemption Class", style="Primary.TLabel"
-        ).grid(column=0, row=3, sticky="w", pady=(0, 5))
-        ttk.Label(
-            vehicle_details_frame,
-            textvariable=self.parent.exempt_class_var,
-            style="Secondary.TLabel",
-        ).grid(column=1, row=3, columnspan=2, sticky="e", pady=(0, 5))
-
-        ttk.Label(
-            vehicle_details_frame, text="FastTag TID", style="Primary.TLabel"
-        ).grid(column=0, row=4, sticky="w", pady=(0, 5))
-        ttk.Label(
-            vehicle_details_frame,
-            textvariable=self.parent.fast_tag_var,
-            style="Secondary.TLabel",
-        ).grid(column=1, row=4, columnspan=2, sticky="e", pady=(0, 5))
-
-        ttk.Label(vehicle_details_frame, text="Toll Fees", style="Primary.TLabel").grid(
-            column=0, row=5, sticky="w", pady=(0, 5)
-        )
-        ttk.Label(
-            vehicle_details_frame,
-            textvariable=self.parent.toll_fee_var,
-            style="Secondary.TLabel",
-        ).grid(column=1, row=5, columnspan=2, sticky="e", pady=(0, 5))
-
-        # vehicle class slection frame
-        self.vehicle_selection_frame = ttk.Frame(self, style="Plane.TFrame")
-        self.vehicle_selection_frame.grid(column=0, row=2, columnspan=2, sticky="wens")
-        self.vehicle_selection_frame.columnconfigure(0, weight=1)
-        self.vehicle_selection_frame.columnconfigure(1, weight=1)
-        self.vehicle_selection_frame.columnconfigure(2, weight=1)
-        self.vehicle_selection_frame.grid_remove()
-
-        self.exempt_classes_label = ttk.Label(
-            self.vehicle_selection_frame,
-            text="Select Vehicle Class",
-            style="Main.TLabel",
-        )
-        self.exempt_classes_label.grid(column=0, row=0, columnspan=3, pady=(0, 2), sticky="wne")
-
-        raw_vehicle_classes = self.parent.vehicle_classes
-        self.vehicle_classes = [ValueSetter(raw_vehicle_classes.columns,entry) for entry in raw_vehicle_classes.values]
-
-        self.create_class_buttons(
-            self.vehicle_selection_frame,
-            self.vehicle_classes,
-            self.select_vehicle_class,
-        )
-        # journey class slection frame
-        self.journey_selection_frame = ttk.Frame(self, style="Plane.TFrame")
-        self.journey_selection_frame.grid(column=0, row=2, columnspan=2, sticky="wesn")
-        self.journey_selection_frame.grid_remove()
-
-        self.exempt_classes_label = ttk.Label(
-            self.journey_selection_frame,
-            text="Select Journey Class",
-            style="Main.TLabel",
-        )
-        self.exempt_classes_label.grid(
-            column=0, row=0, columnspan=3, sticky="wen", pady=(0, 5)
-        )
-        raw_journey_classes = self.parent.journey_classes
-        self.journey_classes = [ValueSetter(raw_journey_classes.columns,entry) for entry in raw_journey_classes.values]
-
-        self.create_class_buttons(
-            self.journey_selection_frame,
-            self.journey_classes,
-            self.select_journey_class,
-        )
-
-        # exempt class slection frame
-        self.exempt_selection_frame = ttk.Frame(self, style="Plane.TFrame")
-        self.exempt_selection_frame.grid(column=0, row=2, columnspan=2, sticky="wens")
-        self.exempt_selection_frame.grid_remove()
-
-        self.exempt_classes_label = ttk.Label(
-            self.exempt_selection_frame, text="Select Exempt Class", style="Main.TLabel"
-        )
-        self.exempt_classes_label.grid(
-            column=0, row=0, columnspan=3, sticky="wne", pady=(0, 5)
-        )
-        raw_exempt_classes = self.parent.exempt_classes
-        self.exempt_classes = [ValueSetter(raw_exempt_classes.columns,entry) for entry in raw_exempt_classes.values]
-
-        self.create_class_buttons(
-            self.exempt_selection_frame,
-            self.exempt_classes,
-            self.select_exempt_class,
-        )
-
-        self.vehicle_number_entry.focus()
-        self.show_vehicle_class_selection()
-        self.parent.parent.bind("<Escape>", self.reset_selection_classes)
-
-    def show_vehicle_class_selection(self, warning=False):
-        self.parent.toll_fee_var.set("")
-        self.vehicle_selection_frame.grid()
-
-    def show_journey_class_selection(self, warning=False):
-        self.vehicle_selection_frame.grid_remove()
-        self.exempt_selection_frame.grid_remove()
-        self.journey_selection_frame.grid()
-
-    def show_exempt_class_selection(self, warning=False):
-        self.vehicle_selection_frame.grid_remove()
-        self.journey_selection_frame.grid_remove()
-        if self.parent.selected_journey_class.Exempt:
-            self.exempt_selection_frame.grid()
-        else:
-            self.exempt_selection_frame.grid_remove()
-
-    def select_vehicle_class(self, vehicle_class):
-        self.parent.selected_vehicle_class = vehicle_class
-        self.parent.vehicle_class_var.set(vehicle_class.Name)
-        self.show_journey_class_selection()
-        self.parent.logger.info("Vehicle Class Selected Manually")
-        print('vehicle class selected successfully')
-
-    def select_journey_class(self, journey_class):
-        if not self.parent.selected_vehicle_class:
-            return
-        self.parent.selected_journey_class = journey_class
-        self.parent.journey_class_var.set(journey_class.Name)
-        self.parent.calculate_toll_fare()
-        self.show_exempt_class_selection()
-        self.parent.logger.info("Journey Class Selected Manually")
-
-    def select_exempt_class(self, exempt_class):
-        if not self.parent.selected_journey_class or not self.parent.selected_vehicle_class:
-            return False
-        if not self.parent.selected_journey_class.Exempt:
-            return False
-        self.parent.selected_exempt_class = exempt_class
-        self.parent.exempt_class_var.set(exempt_class.Name)
-        self.exempt_selection_frame.grid_remove()
-        self.parent.logger.info("Exempt Class Selected Manually")
-
-    def create_class_buttons( self, frame, vehicle_objects, function):
-        for index, vehicle in enumerate(vehicle_objects):
-            column = index % 3
-            row = index // 3 + 1
-
-            ttk.Button( frame,
-                style="Custom.TButton",
-                text=f"{vehicle.Name} \n {vehicle.Key_Binding}",
-                command=lambda v=vehicle: function(v),
-            ).grid(column=column, row=row, padx=2, pady=2, sticky="we")
-
-            self.parent.parent.bind(vehicle.Key_Binding, lambda event=None, v=vehicle: function(v))
-
-    def reset_selection_classes(self, event=None):
-        self.journey_selection_frame.grid_remove()
-        self.exempt_selection_frame.grid_remove()
-        self.show_vehicle_class_selection()
-        self.parent.reset_selection_classes()
-
-class TransactionPanel(ttk.Frame):
-    def __init__(self, parent, frame, column, row, colspan, rowspan):
-        super().__init__(frame, style="Primary.TFrame")
-        self.grid( column=column, row=row, columnspan=colspan, rowspan=rowspan, sticky="wens", pady=(0,0))
-
-        self.parent = parent
-
-        ttk.Label(
-            self,
-            text="Transaction Details",
-            justify="left",
-            style="Main.TLabel",
-        ).pack(anchor="center", fill="both")
-
-        headings = ['Transaction ID', 'Vehicle Class', 'Paid Amount', 'Transaction_Date', 'Vehicle_Number']
-        self.tree = ttk.Treeview(
-            self,
-            columns=headings,
-            show="headings",
-        )
+        self.frame = ttk.Frame(frame, style="Primary.TFrame")
         
-        for heading in headings:
-            self.tree.heading(heading, text=heading)
-            self.tree.column(heading, width=120, anchor="center")
+        self.frame.columnconfigure(1, weight=1)
+        self.frame.columnconfigure(4, weight=1)
 
-        self.tree.pack(fill="both", expand=True)
+        label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="Hours: ")
+        label.grid(row=0, column=0, padx=(2), sticky="we")
+        self.start_hour =ttk.Combobox(self.frame, values=[f"{i:02}" for i in range(24)], width=3) 
+        self.start_hour.grid(row=0, column=1, padx=(2), sticky="we")
+        self.start_hour.set("00")
 
-        transaction_data = self.parent.transaction_data.values
-        for row in transaction_data:
-            row = list(row)
-            print(row)
-            self.tree.insert("", "end", values=row)
-        warning_label = ttk.Label( self, textvariable=self.parent.warning_var, style="Warning.TLabel")
-        warning_label.pack(fill="both", padx=5)
+        label = ttk.Label(self.frame, style="Small_Bold.TLabel", text=":")
+        label.grid(row=0, column=2, padx=(2), sticky="we")
 
-    def update_treeview(self, new_row_data):
-        items = self.tree.get_children()
+        label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="Minutes: ")
+        label.grid(row=0, column=3, padx=(2), sticky="we")
+        self.start_minute = ttk.Combobox(self.frame, values=[f"{i:02}" for i in range(60)], width=3)
+        self.start_minute.grid(row=0, column=4, padx=(2), sticky="we")
+        self.start_minute.set("00")
 
-        if len(items)>=10:
-            self.tree.delete(items[-1])
+    def grid(self, *args, **kwargs):
+        self.frame.grid(*args, **kwargs)
 
-        self.tree.insert("", 0, values=new_row_data)
+    def pack(self, *args, **kwargs):
+        self.frame.pack(*args, **kwargs)
 
+    def get_value(self):
+        selected_hour = int(self.start_hour.get())
+        selected_minute = int(self.start_minute.get())
+        
+        selected_time = time(
+            hour=selected_hour,
+            minute=selected_minute
+        )
+        return selected_time.strftime('%H:%M:%S')
+
+    def validate(self):
+        value = self.get_value()
+        try:
+            datetime.strptime(value, '%H:%M:%S.%f')
+            return True, "Valid."
+        except ValueError:
+            try:
+                datetime.strptime(value, '%H:%M:%S')
+                return True, "Valid."
+            except ValueError:
+                return False, "Invalid time format. Use HH:MM:SS[.nnnnnnn]"
+
+class DateTimeWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+
+        self.frame = ttk.Frame(frame, style="Primary.TFrame")
+        
+        self.frame.columnconfigure(0, weight=1)
+        self.frame.columnconfigure(1, weight=1)
+        self.frame.columnconfigure(3, weight=1)
+
+        self.start_date = DateEntry(self.frame, date_pattern='y-mm-dd', width=12, borderwidth=2)
+        self.start_date.grid(row=0, column=0, padx=(2), sticky="we")
+
+        self.start_hour =ttk.Combobox(self.frame, values=[f"{i:02}" for i in range(24)], width=3) 
+        self.start_hour.grid(row=0, column=1, padx=(2), sticky="we")
+        self.start_hour.set("00")
+
+        label = ttk.Label(self.frame, style="Small_Bold.TLabel", text=":")
+        label.grid(row=0, column=2, padx=(2), sticky="we")
+
+        self.start_minute = ttk.Combobox(self.frame, values=[f"{i:02}" for i in range(60)], width=3)
+        self.start_minute.set("00")
+        self.start_minute.grid(row=0, column=3, padx=(2), sticky="we")
+
+    def grid(self, *args, **kwargs):
+        self.frame.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.frame.pack(*args, **kwargs)
+
+    def get_value(self):
+        selected_date = self.start_date.get_date()
+        selected_hour = int(self.start_hour.get())
+        selected_minute = int(self.start_minute.get())
+
+        selected_datetime = datetime(
+            year=selected_date.year,
+            month=selected_date.month,
+            day=selected_date.day,
+            hour=selected_hour,
+            minute=selected_minute,
+        )
+        return selected_datetime.strftime('%Y-%m-%d %H:%M:%S')
+
+    def validate(self):
+        selected_date = self.start_date.get_date()
+        selected_hour = int(self.start_hour.get())
+        selected_minute = int(self.start_minute.get())
+
+        try:
+            selected_datetime = datetime(
+                year=selected_date.year,
+                month=selected_date.month,
+                day=selected_date.day,
+                hour=selected_hour,
+                minute=selected_minute,
+            )
+        except ValueError as e:
+            return False, str(e)
+
+        if self.column_details.DATA_TYPE in ['datetime', 'datetime2']:
+            if selected_datetime < datetime(1753, 1, 1) or selected_datetime > datetime(9999, 12, 31):
+                return False, "DATETIME must be between 1753-01-01 and 9999-12-31."
+        
+        elif self.column_details.DATA_TYPE == 'smalldatetime':
+            if selected_datetime < datetime(1900, 1, 1) or selected_datetime > datetime(2079, 6, 6):
+                return False, "SMALLDATETIME must be between 1900-01-01 and 2079-06-06."
+        
+        elif self.column_details.DATA_TYPE == 'datetimeoffset':
+            if selected_datetime < datetime(1753, 1, 1) or selected_datetime > datetime(9999, 12, 31):
+                return False, "DATETIMEOFFSET must be between 1753-01-01 and 9999-12-31."
+
+        return True, "Valid."
+
+class StringWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.variable = tk.StringVar()
+        self.entry = ttk.Entry(frame, textvariable=self.variable)
+
+    def get_widget(self):
+        return self.entry
+
+    def grid(self, *args, **kwargs):
+        self.entry.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.entry.pack(*args, **kwargs)
+
+    def get_value(self):
+        return self.variable.get().strip()
+
+    def validate(self):
+        value = self.get_value()  # Get the trimmed value
+        max_length = self.column_details.CHARACTER_MAXIMUM_LENGTH
+        is_nullable = self.column_details.IS_NULLABLE == 'YES'
+
+        if not isinstance(value, str):
+            return False, "Value must be a string."
+
+        if value == "":
+            if not is_nullable:
+                return False, "This field cannot be empty."
+            else:
+                return True, "Valid."
+
+        if max_length != -1 and len(value) > max_length:
+            return False, f"Length must not exceed {max_length} characters."
+
+        return True, "Valid."
+
+class IntegerWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.variable = tk.StringVar()
+        self.entry = ttk.Entry(frame, textvariable=self.variable)
+
+    def get_widget(self):
+        return self.entry
+
+    def grid(self, *args, **kwargs):
+        self.entry.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.entry.pack(*args, **kwargs)
+
+    def get_value(self):
+        value = self.variable.get().strip()
+        if value == "":
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            return None
+
+    def validate(self):
+        value = self.get_value()
+        if value is None:
+            if self.column_details.IS_NULLABLE == 'YES':
+                return True, "Valid."
+            else:
+                return False, "This field cannot be empty."
+
+        if self.column_details.DATA_TYPE == 'smallint':
+            return self.validate_smallint(value)
+        elif self.column_details.DATA_TYPE == 'int':
+            return self.validate_int(value)
+        elif self.column_details.DATA_TYPE == 'bigint':
+            return self.validate_bigint(value)
+        elif self.column_details.DATA_TYPE == 'tinyint':
+            return self.validate_tinyint(value)
+        else:
+            return self.validate_int(value)  # Default integer validation
+
+    def validate_int(self, value, min_val=-2147483648, max_val=2147483647):
+        if not isinstance(value, int):
+            return False, "Value must be an integer."
+        if value < min_val or value > max_val:
+            return False, f"Value must be between {min_val} and {max_val}."
+        return True, "Valid."
+
+    def validate_tinyint(self, value):
+        return self.validate_int(value, 0, 255)
+
+    def validate_smallint(self, value):
+        return self.validate_int(value, -32768, 32767)
+
+    def validate_bigint(self, value):
+        return self.validate_int(value, -9223372036854775808, 9223372036854775807)
+
+class BinaryWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.variable = tk.StringVar()
+        self.entry = ttk.Entry(frame, textvariable=self.variable)
+
+    def get_widget(self):
+        return self.entry
+
+    def grid(self, *args, **kwargs):
+        self.entry.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.entry.pack(*args, **kwargs)
+
+    def get_value(self):
+        value = self.variable.get().strip()
+        if value == "":
+            return None
+        try:
+            return bytes.fromhex(value)
+        except ValueError:
+            return None
+
+    def validate(self):
+        value = self.get_value()
+        max_length = self.column_details.CHARACTER_MAXIMUM_LENGTH
+        
+        if value is None:
+            if self.column_details.IS_NULLABLE == 'YES':
+                return True, "Valid."
+            else:
+                return False, "This field cannot be empty."
+
+        if self.column_details.DATA_TYPE == 'binary':
+            return self.validate_binary(value, max_length)
+        elif self.column_details.DATA_TYPE == 'varbinary':
+            return self.validate_varbinary(value, max_length)
+        else:
+            return False, "Unsupported data type for binary validation."
+
+    def validate_binary(self, value, max_length):
+        if not isinstance(value, (bytes, bytearray)):
+            return False, "Value must be binary data."
+        if len(value) > max_length:
+            return False, f"Binary data length must not exceed {max_length} bytes."
+        return True, "Valid."
+
+    def validate_varbinary(self, value, max_length):
+        return self.validate_binary(value, max_length)
+
+class BooleanWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.variable = tk.StringVar()
+        self.entry = ttk.Combobox(frame, textvariable=self.variable, values=['YES', 'NO'], state="readonly")
+
+    def get_widget(self):
+        return self.entry
+
+    def grid(self, *args, **kwargs):
+        self.entry.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.entry.pack(*args, **kwargs)
+
+    def get_value(self):
+        value = self.variable.get().strip()
+        if value == "YES":
+            return 1
+        elif value == "NO":
+            return 0
+        return None
+
+    def validate(self):
+        value = self.variable.get().strip()
+
+        if self.column_details.IS_NULLABLE == 'YES' and value == "":
+            return True, "Valid."
+
+        if value not in ['YES', 'NO']:
+            return False, "Please select 'YES' or 'NO'."
+
+        return True, "Valid."
+
+class FloatWidget:
+    def __init__(self, frame, column_details):
+        self.frame = frame
+        self.column_details = column_details
+        self.variable = tk.StringVar()
+        self.entry = ttk.Entry(self.frame, textvariable=self.variable)
+
+    def get_widget(self):
+        return self.entry
+
+    def grid(self, *args, **kwargs):
+        self.entry.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.entry.pack(*args, **kwargs)
+
+    def validate(self):
+        data_type = self.column_details.DATA_TYPE.lower()
+        precision = self.column_details.NUMERIC_PRECISION
+        scale = self.column_details.NUMERIC_SCALE
+        value = self.variable.get()
+
+        if data_type in ['decimal', 'numeric']:
+            return self.validate_decimal(value, precision, scale)
+        elif data_type == 'money':
+            return self.validate_money(value)
+        elif data_type == 'smallmoney':
+            return self.validate_smallmoney(value)
+        elif data_type == 'float':
+            return self.validate_float(value)
+        elif data_type == 'real':
+            return self.validate_real(value)
+        else:
+            return False, f"Unsupported data type: {data_type}"
+
+    def validate_decimal(self, value, precision, scale):
+        if not self.is_number(value):
+            return False, "Value must be a number."
+        
+        str_value = str(value)
+        if '.' in str_value:
+            integer_part, decimal_part = str_value.split('.')
+        else:
+            integer_part, decimal_part = str_value, ''
+
+        if len(integer_part + decimal_part) > precision:
+            return False, f"Total number of digits must not exceed {precision}."
+
+        if len(decimal_part) > scale:
+            return False, f"Decimal places must not exceed {scale}."
+
+        return True, "Valid."
+
+    def validate_money(self, value):
+        try:
+            val = float(value)
+        except ValueError:
+            return False, "Value must be a valid monetary amount."
+
+        return self.validate_decimal(value, precision=19, scale=4)
+
+    def validate_smallmoney(self, value):
+        try:
+            val = float(value)
+        except ValueError:
+            return False, "Value must be a valid monetary amount."
+
+        return self.validate_decimal(value, precision=10, scale=4)
+
+    def validate_float(self, value, precision=53):
+        try:
+            val = float(value)
+        except ValueError:
+            return False, "Value must be a valid float."
+
+        return True, "Valid."
+
+    def validate_real(self, value):
+        return self.validate_float(value, precision=24)
+
+    @staticmethod
+    def is_number(value):
+        try:
+            float(value)
+            return True
+        except ValueError:
+            return False
+
+class JsonWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.variable = tk.StringVar()
+        self.entry = ttk.Entry(frame, textvariable=self.variable)
+
+    def get_widget(self):
+        return self.entry
+
+    def grid(self, *args, **kwargs):
+        self.entry.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.entry.pack(*args, **kwargs)
+
+    def get_value(self):
+        return self.variable.get().strip()
+
+    def validate(self):
+        data_type = self.column_details.DATA_TYPE.lower()
+        allow_null = self.column_details.IS_NULLABLE
+        value = self.get_value()
+
+        if not allow_null and (value is None or value == ""):
+            return False, "Value cannot be NULL or empty."
+        
+        max_length = self.column_details.CHARACTER_MAX_LENGTH
+        if max_length != -1 and len(value) > max_length:
+            return False, f"Value exceeds maximum length of {max_length} characters."
+
+        if value:
+            try:
+                json.loads(value)
+            except ValueError as e:
+                return False, f"Invalid JSON format: {e}"
+
+        return True, "Valid."
+
+class XmlWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.variable = tk.StringVar()
+        self.entry = ttk.Entry(frame, textvariable=self.variable)
+
+    def get_widget(self):
+        return self.entry
+
+    def grid(self, *args, **kwargs):
+        self.entry.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.entry.pack(*args, **kwargs)
+
+    def get_value(self):
+        return self.variable.get().strip()
+
+    def validate(self):
+        data_type = self.column_details.DATA_TYPE.lower()
+        allow_null = self.column_details.IS_NULLABLE
+        value = self.get_value()
+
+        if not allow_null and (value is None or value == ""):
+            return False, "Value cannot be NULL or empty."
+
+        max_length = self.column_details.CHARACTER_MAX_LENGTH
+        if max_length != -1 and len(value) > max_length:
+            return False, f"Value exceeds maximum length of {max_length} characters."
+
+        if value:
+            try:
+                ET.fromstring(value)
+            except ET.ParseError as e:
+                return False, f"Invalid XML format: {e}"
+
+        return True, "Valid."
+
+class UUIDWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.variable = tk.StringVar()
+        self.entry = ttk.Entry(frame, textvariable=self.variable)
+
+    def get_widget(self):
+        return self.entry
+
+    def grid(self, *args, **kwargs):
+        self.entry.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.entry.pack(*args, **kwargs)
+
+    def get_value(self):
+        return self.variable.get().strip()
+
+    def validate(self):
+        data_type = self.column_details.DATA_TYPE.lower()
+        allow_null = self.column_details.IS_NULLABLE
+        value = self.get_value()
+
+        if not allow_null and (value is None or value == ""):
+            return False, "Value cannot be NULL or empty."
+
+        max_length = self.column_details.CHARACTER_MAX_LENGTH
+        if max_length != -1 and len(value) > max_length:
+            return False, f"Value exceeds maximum length of {max_length} characters."
+
+        if value:
+            try:
+                uuid.UUID(str(value))
+                return True, "Valid."
+            except ValueError:
+                return False, "Value must be a valid UUID."
+
+        return True, "Valid."
+
+class GeometryWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.variable = tk.StringVar()
+
+        self.frame = ttk.Frame(frame, style="Primary.TFrame")
+        self.frame.columnconfigure(1, weight=1)
+        self.frame.columnconfigure(3, weight=1)
+
+        label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="X : ")
+        label.grid(row=0, column=0, padx=(2), sticky="we")
+
+        self.x = ttk.Entry(self.frame)
+        self.x.grid(row=0, column=1, padx=(2), sticky="we")
+
+        label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="Y : ")
+        label.grid(row=0, column=2, padx=(2), sticky="we")
+
+        self.y = ttk.Entry(self.frame)
+        self.y.grid(row=0, column=3, padx=(2), sticky="we")
+
+    def get_widget(self):
+        return self.frame
+
+    def grid(self, *args, **kwargs):
+        self.frame.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.frame.pack(*args, **kwargs)
+
+    def get_value(self):
+        x_value = self.x.get().strip()
+        y_value = self.y.get().strip()
+
+        if x_value == "" or y_value == "":
+            return ""
+
+        return f"geometry::STGeomFromText('POINT({x_value} {y_value})', 0)"
+
+    def validate(self):
+        data_type = self.column_details.DATA_TYPE.lower()
+        allow_null = self.column_details.IS_NULLABLE
+        value = self.get_value()
+
+        if not allow_null and (value is None or value == ""):
+            return False, "Value cannot be NULL or empty."
+
+        max_length = self.column_details.CHARACTER_MAX_LENGTH
+        if max_length != -1 and len(value) > max_length:
+            return False, f"Value exceeds maximum length of {max_length} characters."
+
+        if value:
+            pattern = r"^geometry::STGeomFromText\('POINT\((-?\d+(\.\d+)? -?\d+(\.\d+)?)\)', 0\)$"
+            if not re.match(pattern, value):
+                return False, "Invalid Geometry format. Expected format: POINT(x y)"
+
+        return True, "Valid."
+
+class GeographyWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+
+        self.frame = ttk.Frame(frame, style="Primary.TFrame")
+        self.frame.columnconfigure(1, weight=1)
+        self.frame.columnconfigure(3, weight=1)
+
+        label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="Longitude: ")
+        label.grid(row=0, column=0, padx=(2), sticky="we")
+        self.longitude = ttk.Entry(self.frame)
+        self.longitude.grid(row=0, column=1, padx=(2), sticky="we")
+
+        label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="Latitude: ")
+        label.grid(row=0, column=2, padx=(2), sticky="we")
+        self.latitude = ttk.Entry(self.frame)
+        self.latitude.grid(row=0, column=3, padx=(2), sticky="we")
+
+    def get_widget(self):
+        return self.frame
+
+    def grid(self, *args, **kwargs):
+        self.frame.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.frame.pack(*args, **kwargs)
+
+    def get_value(self):
+        longitude_value = self.longitude.get().strip()
+        latitude_value = self.latitude.get().strip()
+
+        if longitude_value == "" or latitude_value == "":
+            return ""
+
+        return f"geography::Point({longitude_value}, {latitude_value})"
+
+    def validate(self):
+        data_type = self.column_details.DATA_TYPE.lower()
+        allow_null = self.column_details.IS_NULLABLE
+        value = self.get_value()
+
+        if not allow_null and (value is None or value == ""):
+            return False, "Value cannot be NULL or empty."
+
+        max_length = self.column_details.CHARACTER_MAX_LENGTH
+        if max_length != -1 and len(value) > max_length:
+            return False, f"Value exceeds maximum length of {max_length} characters."
+
+        if value:
+            pattern = r"^geography::Point\((-?\d+(\.\d+)?) ?, ?(-?\d+(\.\d+)?)\)$"
+            if not re.match(pattern, value):
+                return False, "Invalid Geography format. Expected format: Point(longitude, latitude)"
+
+        return True, "Valid."
+
+class ImageWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.variable = None
+
+        self.button = ttk.Button(frame, text="Select an Image", command=self.open_file_dialog)
+
+    def get_widget(self):
+        return self.button
+
+    def grid(self, *args, **kwargs):
+        self.button.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.button.pack(*args, **kwargs)
+
+    def open_file_dialog(self):
+        self.file_path = filedialog.askopenfilename(
+            title="Select an Image",
+            filetypes=[("Image Files", "*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.tiff")]
+        )
+        if self.file_path:
+            if self.validate():
+                self.load_image()
+
+    def validate(self):
+        try:
+            img = Image.open(self.file_path)
+            img.verify()
+            return True
+        except (IOError, SyntaxError) as e:
+            messagebox.showerror("Invalid Image", f"Selected file is not a valid image: {e}")
+            return False
+
+    def load_image(self):
+        with open(self.file_path, 'rb') as img_file:
+            self.variable = img_file.read()
+
+        self.button.config(text=self.file_path.split("/")[-1])
+
+    def get_value(self):
+        return self.variable
 
 class ComponentStyle(ttk.Style):
     def __init__(self, root):
@@ -664,36 +1049,35 @@ class ComponentStyle(ttk.Style):
         # Label Styles
         #-------------
         self.configure(
-            "Primary.TLabel",
-            foreground="#2268c7",
-            background="white",
-            font=("Helvetica", 12, "bold"),
-        )
-        self.configure(
-            "Warning.TLabel",
-            foreground="#2268c7",
-            relief="flat",
-            background="white",
-            font=("Helvetica", 12, "bold"),
-        )
-        self.configure(
-            "Secondary.TLabel",
-            foreground="#08158c",
-            background="white",
-            font=("Helvetica", 11, "bold"),
-        )
-        self.configure(
-            "Main.TLabel",
+            "Normal.TLabel",
             foreground="black",
             background="white",
-            font=("Helvetica", 10, 'bold'),
+            font=("Helvetica", 10),
+        )
+        self.configure(
+            "Normal_Bold.TLabel",
+            foreground="black",
+            background="white",
+            font=("Helvetica", 10, "bold"),
+        )
+        self.configure(
+            "Small.TLabel",
+            foreground="black",
+            background="white",
+            font=("Helvetica", 9),
+        )
+        self.configure(
+            "Small_Bold.TLabel",
+            foreground="black",
+            background="white",
+            font=("Helvetica", 9, 'bold'),
             padding=2,
         )
         self.configure(
-            "Black.TLabel",
-            foreground="white",
-            background="black",
-            font=("Helvetica", 10, 'bold'),
+            "Heading.TLabel",
+            foreground="black",
+            background="white",
+            font=("Helvetica", 12, 'bold'),
             padding=2,
         )       
         # Seperator Styles
