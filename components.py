@@ -1,5 +1,9 @@
+import os
 import json
-import datetime
+import re
+import uuid
+import binascii
+from datetime import datetime, time, date
 from PIL import Image
 from tkinter import ttk, filedialog, messagebox
 from tkcalendar import DateEntry
@@ -146,7 +150,6 @@ class LoginPage(ttk.Frame):
 
         with open('config.json', 'r') as f:
             self.config = json.load(f)
-            print(self.config)
         host_combobox = ttk.Combobox(
                 frame,
                 textvariable=self.host_name_var,
@@ -164,11 +167,7 @@ class LoginPage(ttk.Frame):
 
         label = ttk.Label( frame, text="User Name : ", font=self.small_bold_font, background='white',)
         label.grid(column=0, row=6, sticky="w")
-        self.user_combobox = ttk.Combobox(
-                frame,
-                textvariable=self.user_name_var,
-                values=[],
-                )
+        self.user_combobox = ttk.Combobox(frame, textvariable=self.user_name_var, values=[])
         self.user_combobox.bind("<<ComboboxSelected>>", self.select_user)
         self.user_combobox.grid(column=0, row=7, sticky="we", pady=(0, 10))
 
@@ -216,7 +215,6 @@ class LoginPage(ttk.Frame):
         user_name = self.user_name_var.get()
         password = self.password_var.get()
         db_name = self.db_name_var.get()
-        print(host_name, port, user_name, password, db_name) 
         if all((host_name, port, user_name, password, db_name)):
             self.save_connection_details(host_name, port, user_name, password, db_name) 
             self.login_button.config(state='disabled')
@@ -248,7 +246,7 @@ class LoginPage(ttk.Frame):
                     }
                 }
         with open('config.json', 'w') as f:
-            json.dump(self.config, f, indent=2)  # Use indent for better readability
+            json.dump(self.config, f, indent=2)
 
 class ColumnSelectionWindow(tk.Toplevel):
     def __init__( self, parent, notification_type="warning", title="APL Techno"):
@@ -256,7 +254,7 @@ class ColumnSelectionWindow(tk.Toplevel):
         self.parent = parent
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
-        center_window(self, 250, 200, top=False)
+        center_window(self, 400, 250, top=False)
 
         def dismiss(event=None):
             self.grab_release()
@@ -298,71 +296,129 @@ class ColumnSelectionWindow(tk.Toplevel):
         self.grab_release()
         self.destroy()
 
-class CustomComboBoxWidget(ttk.Combobox):
-    def __init__(self, *args, primary_key='', **kwargs):
-        self.primary_key = primary_key
-        super().__init__(*args, **kwargs)
-        self.objects_dict = {str(getattr(obj, obj._id)): obj for obj in kwargs.get('values')} 
-        print(self.objects_dict)
-    
+class ErrorWindow(tk.Toplevel):
+    def __init__( self, parent, errors=[], notification_type="warning", title="Input Field Error"):
+        super().__init__(parent)
+        self.parent = parent
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+        center_window(self, 600, 400, top=False)
+
+        def dismiss(event=None):
+            self.grab_release()
+            self.destroy()
+        self.focus_set()
+        self.bind("<Return>", dismiss)
+        self.protocol("WM_DELETE_WINDOW", dismiss)
+        self.iconbitmap(full_path(f"{notification_type}.ico"))
+        self.title(notification_type)
+
+        main_frame = ttk.Frame(self, style="Plane.TFrame")
+        main_frame.grid(column=0, row=0, sticky="wnes")
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(0, weight=1)
+
+        text_widget = tk.Text(main_frame, wrap=tk.WORD, font=("Helvetica", 9))
+        text_widget.grid(row=0, column=0, sticky='ewns')
+
+        scrollbar = tk.Scrollbar(main_frame)
+        scrollbar.grid(row=0, column=1, sticky='ns')
+
+        text_widget.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=text_widget.yview)
+
+        self.insert_bulleted_list(text_widget, errors)
+
+        self.wait_visibility()
+        self.grab_set()
+        self.wait_window()
+
+    def insert_bulleted_list(self, text_widget, items):
+        text_widget.delete(1.0, tk.END)
+        for index, item in enumerate(items, 1):
+            text_widget.insert(tk.END, f" {index}. {item}\n")
+
+class ForeignKeyComboBoxWidget:
+    def __init__(self, frame, column_details, foreign_key_values):
+        self.column_details = column_details
+        self.variable = tk.StringVar()
+        self.entry = ttk.Combobox(frame, textvariable=self.variable, values=foreign_key_values, width=3, state="readonly") 
+        #self.objects_dict = {str(getattr(obj, obj._id)): obj for obj in kwargs.get('values')} 
+ 
+    def get_value(self):
+        return self.variable.get()
+
+    def grid(self, *args, **kwargs):
+        self.entry.grid(*args, **kwargs)
+
     def get_object(self):
         return self.objects_dict.get(str(self.get()))
     
-    def get_value(self):
+    def get_value1(self):
         obj = self.get_object()
         if obj:
             return getattr(obj, self.primary_key)
         else: return obj
 
+    def validate(self):
+        return True, 'Valid.'
+
+    def reset(self):
+        self.variable.set('')
+
 class DateWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
         self.variable = tk.StringVar()
-        self.entry = DateEntry(frame, date_pattern='y-mm-dd', width=12, borderwidth=2,)
+        self.entry = DateEntry(frame, textvariable=self.variable, date_pattern='y-mm-dd', width=12, borderwidth=2,)
 
     def get_value(self):
-        return self.entry.get_date()
+        return self.entry.get_date().strftime('%Y-%m-%d')
 
     def grid(self, *args, **kwargs):
         self.entry.grid(*args, **kwargs)
 
     def validate(self):
-        value = self.get_value()
+        value = self.entry.get_date() 
         try:
-            parsed_date = datetime.strptime(value, '%Y-%m-%d')
-            min_date = datetime(1753, 1, 1)
-            max_date = datetime(9999, 12, 31)
+            min_date = date(1753, 1, 1)
+            max_date = date(9999, 12, 31)
 
-            if not (min_date <= parsed_date <= max_date):
+            if not (min_date <= value <= max_date):
                 return False, f"Date must be between {min_date.date()} and {max_date.date()}."
         except ValueError:
             return False, "Invalid date format. Use YYYY-MM-DD."
         return True, "Valid."
 
+    def reset(self):
+        self.variable.set('')
+
 class TimeWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.variable = tk.StringVar()
 
         self.frame = ttk.Frame(frame, style="Primary.TFrame")
         
         self.frame.columnconfigure(1, weight=1)
         self.frame.columnconfigure(4, weight=1)
+        
+        self.start_hour_var = tk.StringVar(value='00')
+        self.start_minute_var = tk.StringVar(value='00')
 
         label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="Hours: ")
         label.grid(row=0, column=0, padx=(2), sticky="we")
-        self.start_hour =ttk.Combobox(self.frame, values=[f"{i:02}" for i in range(24)], width=3) 
-        self.start_hour.grid(row=0, column=1, padx=(2), sticky="we")
-        self.start_hour.set("00")
+        start_hour =ttk.Combobox(self.frame, textvariable=self.start_hour_var, values=[f"{i:02}" for i in range(24)], width=3, state="readonly") 
+        start_hour.grid(row=0, column=1, padx=(2), sticky="we")
+        start_hour.set("00")
 
         label = ttk.Label(self.frame, style="Small_Bold.TLabel", text=":")
         label.grid(row=0, column=2, padx=(2), sticky="we")
 
         label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="Minutes: ")
         label.grid(row=0, column=3, padx=(2), sticky="we")
-        self.start_minute = ttk.Combobox(self.frame, values=[f"{i:02}" for i in range(60)], width=3)
-        self.start_minute.grid(row=0, column=4, padx=(2), sticky="we")
-        self.start_minute.set("00")
+        start_minute = ttk.Combobox(self.frame, textvariable=self.start_minute_var, values=[f"{i:02}" for i in range(60)], width=3, state="readonly")
+        start_minute.grid(row=0, column=4, padx=(2), sticky="we")
+        start_minute.set("00")
 
     def grid(self, *args, **kwargs):
         self.frame.grid(*args, **kwargs)
@@ -371,8 +427,8 @@ class TimeWidget:
         self.frame.pack(*args, **kwargs)
 
     def get_value(self):
-        selected_hour = int(self.start_hour.get())
-        selected_minute = int(self.start_minute.get())
+        selected_hour = int(self.start_hour_var.get())
+        selected_minute = int(self.start_minute_var.get())
         
         selected_time = time(
             hour=selected_hour,
@@ -392,6 +448,10 @@ class TimeWidget:
             except ValueError:
                 return False, "Invalid time format. Use HH:MM:SS[.nnnnnnn]"
 
+    def reset(self):
+        self.start_hour_var.set("00")
+        self.start_minute_var.set("00")
+
 class DateTimeWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
@@ -402,17 +462,21 @@ class DateTimeWidget:
         self.frame.columnconfigure(1, weight=1)
         self.frame.columnconfigure(3, weight=1)
 
-        self.start_date = DateEntry(self.frame, date_pattern='y-mm-dd', width=12, borderwidth=2)
+        self.start_date_var = tk.StringVar()
+        self.start_minute_var = tk.StringVar(value='00')
+        self.start_hour_var = tk.StringVar(value='00')
+
+        self.start_date = DateEntry(self.frame, textvariable=self.start_date_var, date_pattern='y-mm-dd', width=12, borderwidth=2)
         self.start_date.grid(row=0, column=0, padx=(2), sticky="we")
 
-        self.start_hour =ttk.Combobox(self.frame, values=[f"{i:02}" for i in range(24)], width=3) 
+        self.start_hour =ttk.Combobox(self.frame, textvariable=self.start_hour_var, values=[f"{i:02}" for i in range(24)], width=3, state="readonly") 
         self.start_hour.grid(row=0, column=1, padx=(2), sticky="we")
         self.start_hour.set("00")
 
         label = ttk.Label(self.frame, style="Small_Bold.TLabel", text=":")
         label.grid(row=0, column=2, padx=(2), sticky="we")
 
-        self.start_minute = ttk.Combobox(self.frame, values=[f"{i:02}" for i in range(60)], width=3)
+        self.start_minute = ttk.Combobox(self.frame, textvariable=self.start_minute_var, values=[f"{i:02}" for i in range(60)], width=3)
         self.start_minute.set("00")
         self.start_minute.grid(row=0, column=3, padx=(2), sticky="we")
 
@@ -421,11 +485,16 @@ class DateTimeWidget:
 
     def pack(self, *args, **kwargs):
         self.frame.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.start_date_var.set('')
+        self.start_hour_var.set("00")
+        self.start_minute_var.set("00")
 
     def get_value(self):
         selected_date = self.start_date.get_date()
-        selected_hour = int(self.start_hour.get())
-        selected_minute = int(self.start_minute.get())
+        selected_hour = int(self.start_hour_var.get())
+        selected_minute = int(self.start_minute_var.get())
 
         selected_datetime = datetime(
             year=selected_date.year,
@@ -469,7 +538,8 @@ class DateTimeWidget:
 class StringWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.variable = tk.StringVar()
+        self.default_value = self.column_details.COLUMN_DEFAULT[2:-2] if self.column_details.COLUMN_DEFAULT else ''
+        self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, textvariable=self.variable)
 
     def get_widget(self):
@@ -480,12 +550,15 @@ class StringWidget:
 
     def pack(self, *args, **kwargs):
         self.entry.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.variable.set(self.default_value)
 
     def get_value(self):
         return self.variable.get().strip()
 
     def validate(self):
-        value = self.get_value()  # Get the trimmed value
+        value = self.get_value()
         max_length = self.column_details.CHARACTER_MAXIMUM_LENGTH
         is_nullable = self.column_details.IS_NULLABLE == 'YES'
 
@@ -498,15 +571,16 @@ class StringWidget:
             else:
                 return True, "Valid."
 
-        if max_length != -1 and len(value) > max_length:
+        if max_length is not None and max_length != -1 and len(value) > max_length:
             return False, f"Length must not exceed {max_length} characters."
 
         return True, "Valid."
 
-class IntegerWidget:
+class SQLWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.variable = tk.StringVar()
+        self.default_value = self.column_details.COLUMN_DEFAULT[2:-2] if self.column_details.COLUMN_DEFAULT else ''
+        self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, textvariable=self.variable)
 
     def get_widget(self):
@@ -517,6 +591,43 @@ class IntegerWidget:
 
     def pack(self, *args, **kwargs):
         self.entry.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.variable.set(self.default_value)
+
+    def get_value(self):
+        return self.variable.get().strip()
+
+    def validate(self):
+        value = self.get_value()
+        is_nullable = self.column_details.IS_NULLABLE == 'YES'
+
+        if not is_nullable and (value == "" or value is None):
+            return False, "This field cannot be empty."
+
+        if value == "":
+            return True, "Valid."
+
+        return True, "Valid."
+
+class IntegerWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.default_value = self.column_details.COLUMN_DEFAULT[2:-2] if self.column_details.COLUMN_DEFAULT else ''
+        self.variable = tk.StringVar(value=self.default_value)
+        self.entry = ttk.Entry(frame, textvariable=self.variable)
+
+    def get_widget(self):
+        return self.entry
+
+    def grid(self, *args, **kwargs):
+        self.entry.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.entry.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.variable.set(self.default_value)
 
     def get_value(self):
         value = self.variable.get().strip()
@@ -533,7 +644,7 @@ class IntegerWidget:
             if self.column_details.IS_NULLABLE == 'YES':
                 return True, "Valid."
             else:
-                return False, "This field cannot be empty."
+                return False, "This field accepts only integer values."
 
         if self.column_details.DATA_TYPE == 'smallint':
             return self.validate_smallint(value)
@@ -544,7 +655,7 @@ class IntegerWidget:
         elif self.column_details.DATA_TYPE == 'tinyint':
             return self.validate_tinyint(value)
         else:
-            return self.validate_int(value)  # Default integer validation
+            return self.validate_int(value)
 
     def validate_int(self, value, min_val=-2147483648, max_val=2147483647):
         if not isinstance(value, int):
@@ -562,10 +673,11 @@ class IntegerWidget:
     def validate_bigint(self, value):
         return self.validate_int(value, -9223372036854775808, 9223372036854775807)
 
-class BinaryWidget:
+class BinaryEntryWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.variable = tk.StringVar()
+        self.default_value = self.column_details.COLUMN_DEFAULT[2:-2] if self.column_details.COLUMN_DEFAULT else ''
+        self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, textvariable=self.variable)
 
     def get_widget(self):
@@ -576,47 +688,77 @@ class BinaryWidget:
 
     def pack(self, *args, **kwargs):
         self.entry.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.variable.set(self.default_value)
+
+    def get_user_input(self):
+        return self.variable.get().strip()
 
     def get_value(self):
-        value = self.variable.get().strip()
-        if value == "":
-            return None
-        try:
-            return bytes.fromhex(value)
-        except ValueError:
+        value = self.get_user_input()
+
+        is_valid, message = self.validate()
+        if is_valid:
+            return message
+        else:
             return None
 
     def validate(self):
-        value = self.get_value()
+        value = self.get_user_input()
         max_length = self.column_details.CHARACTER_MAXIMUM_LENGTH
-        
-        if value is None:
-            if self.column_details.IS_NULLABLE == 'YES':
+        data_type = self.column_details.DATA_TYPE
+        is_nullable = self.column_details.IS_NULLABLE == 'YES'
+
+        if not value:
+            if is_nullable:
                 return True, "Valid."
             else:
                 return False, "This field cannot be empty."
 
-        if self.column_details.DATA_TYPE == 'binary':
-            return self.validate_binary(value, max_length)
-        elif self.column_details.DATA_TYPE == 'varbinary':
-            return self.validate_varbinary(value, max_length)
+        if data_type in ['binary', 'varbinary']:
+            return self.validate_binary_data(value, max_length)
         else:
-            return False, "Unsupported data type for binary validation."
+            return False, "Unsupported data type."
 
-    def validate_binary(self, value, max_length):
-        if not isinstance(value, (bytes, bytearray)):
-            return False, "Value must be binary data."
-        if len(value) > max_length:
-            return False, f"Binary data length must not exceed {max_length} bytes."
-        return True, "Valid."
+    def validate_binary_data(self, value, max_length):
+        try:
+            binary_data = None
 
-    def validate_varbinary(self, value, max_length):
-        return self.validate_binary(value, max_length)
+            if all(c in '0123456789abcdefABCDEF' for c in value):
+                binary_data = self.hex_to_binary(value)
+            elif all(c in '01' for c in value):
+                binary_data = self.binary_string_to_binary(value)
+            else:
+                return False, "Input is neither a valid hexadecimal nor a binary string."
+
+            if max_length is not None and max_length != -1 and len(binary_data) > max_length:
+                return False, f"Binary data exceeds maximum length of {max_length} bytes."
+
+            return True, binary_data
+
+        except Exception as e:
+            return False, str(e)
+
+    def hex_to_binary(self, value):
+        try:
+            binary_data = binascii.unhexlify(value)
+            return binary_data
+        except binascii.Error:
+            return False, "Error converting hexadecimal to binary."
+
+    def binary_string_to_binary(self, value):
+        try:
+            binary_data = int(value, 2).to_bytes((len(value) + 7) // 8, byteorder='big')
+            return binary_data
+        except ValueError:
+            return False, "Invalid binary string."
 
 class BooleanWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.variable = tk.StringVar()
+        self.default_value = ('YES' if self.column_details.COLUMN_DEFAULT[2:-2] == '1' else 'NO') if self.column_details.COLUMN_DEFAULT else ''
+        self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Combobox(frame, textvariable=self.variable, values=['YES', 'NO'], state="readonly")
 
     def get_widget(self):
@@ -627,6 +769,9 @@ class BooleanWidget:
 
     def pack(self, *args, **kwargs):
         self.entry.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.variable.set(self.default_value)
 
     def get_value(self):
         value = self.variable.get().strip()
@@ -651,7 +796,8 @@ class FloatWidget:
     def __init__(self, frame, column_details):
         self.frame = frame
         self.column_details = column_details
-        self.variable = tk.StringVar()
+        self.default_value = self.column_details.COLUMN_DEFAULT[2:-2] if self.column_details.COLUMN_DEFAULT else ''
+        self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(self.frame, textvariable=self.variable)
 
     def get_widget(self):
@@ -662,12 +808,18 @@ class FloatWidget:
 
     def pack(self, *args, **kwargs):
         self.entry.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.variable.set(self.default_value)
+
+    def get_value(self):
+        return self.variable.get().strip()
 
     def validate(self):
         data_type = self.column_details.DATA_TYPE.lower()
         precision = self.column_details.NUMERIC_PRECISION
         scale = self.column_details.NUMERIC_SCALE
-        value = self.variable.get()
+        value = self.get_value()
 
         if data_type in ['decimal', 'numeric']:
             return self.validate_decimal(value, precision, scale)
@@ -738,7 +890,8 @@ class FloatWidget:
 class JsonWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.variable = tk.StringVar()
+        self.default_value = self.column_details.COLUMN_DEFAULT[2:-2] if self.column_details.COLUMN_DEFAULT else ''
+        self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, textvariable=self.variable)
 
     def get_widget(self):
@@ -749,6 +902,9 @@ class JsonWidget:
 
     def pack(self, *args, **kwargs):
         self.entry.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.variable.set(self.default_value)
 
     def get_value(self):
         return self.variable.get().strip()
@@ -761,8 +917,8 @@ class JsonWidget:
         if not allow_null and (value is None or value == ""):
             return False, "Value cannot be NULL or empty."
         
-        max_length = self.column_details.CHARACTER_MAX_LENGTH
-        if max_length != -1 and len(value) > max_length:
+        max_length = self.column_details.CHARACTER_MAXIMUM_LENGTH
+        if max_length is not None and max_length != -1 and len(value) > max_length:
             return False, f"Value exceeds maximum length of {max_length} characters."
 
         if value:
@@ -776,7 +932,8 @@ class JsonWidget:
 class XmlWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.variable = tk.StringVar()
+        self.default_value = self.column_details.COLUMN_DEFAULT[2:-2] if self.column_details.COLUMN_DEFAULT else ''
+        self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, textvariable=self.variable)
 
     def get_widget(self):
@@ -787,6 +944,9 @@ class XmlWidget:
 
     def pack(self, *args, **kwargs):
         self.entry.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.variable.set(self.default_value)
 
     def get_value(self):
         return self.variable.get().strip()
@@ -799,8 +959,8 @@ class XmlWidget:
         if not allow_null and (value is None or value == ""):
             return False, "Value cannot be NULL or empty."
 
-        max_length = self.column_details.CHARACTER_MAX_LENGTH
-        if max_length != -1 and len(value) > max_length:
+        max_length = self.column_details.CHARACTER_MAXIMUM_LENGTH
+        if max_length is not None and max_length != -1 and len(value) > max_length:
             return False, f"Value exceeds maximum length of {max_length} characters."
 
         if value:
@@ -814,7 +974,8 @@ class XmlWidget:
 class UUIDWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.variable = tk.StringVar()
+        self.default_value = self.column_details.COLUMN_DEFAULT[2:-2] if self.column_details.COLUMN_DEFAULT else ''
+        self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, textvariable=self.variable)
 
     def get_widget(self):
@@ -825,6 +986,9 @@ class UUIDWidget:
 
     def pack(self, *args, **kwargs):
         self.entry.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.variable.set(self.default_value)
 
     def get_value(self):
         return self.variable.get().strip()
@@ -837,8 +1001,8 @@ class UUIDWidget:
         if not allow_null and (value is None or value == ""):
             return False, "Value cannot be NULL or empty."
 
-        max_length = self.column_details.CHARACTER_MAX_LENGTH
-        if max_length != -1 and len(value) > max_length:
+        max_length = self.column_details.CHARACTER_MAXIMUM_LENGTH
+        if max_length is not None and len(value) > max_length:
             return False, f"Value exceeds maximum length of {max_length} characters."
 
         if value:
@@ -853,23 +1017,33 @@ class UUIDWidget:
 class GeometryWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.variable = tk.StringVar()
+        default_value = self.column_details.COLUMN_DEFAULT[2:-2] if self.column_details.COLUMN_DEFAULT else ''
+        pattern = r"STGeomFromText\('POINT\((\-?\d+ \-?\d+)\)', (\d+)\)"
+
+        geometry_match = re.search(pattern, default_value)
+        if geometry_match:
+            self.coordinates = geometry_match.group(1).split()
+        else:
+            self.coordinates = (0, 0)
 
         self.frame = ttk.Frame(frame, style="Primary.TFrame")
         self.frame.columnconfigure(1, weight=1)
         self.frame.columnconfigure(3, weight=1)
+        
+        self.x_var = tk.StringVar(value=self.coordinates[0])
+        self.y_var = tk.StringVar(value=self.coordinates[1])
 
         label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="X : ")
         label.grid(row=0, column=0, padx=(2), sticky="we")
 
-        self.x = ttk.Entry(self.frame)
-        self.x.grid(row=0, column=1, padx=(2), sticky="we")
+        x = ttk.Entry(self.frame, textvariable=self.x_var)
+        x.grid(row=0,  column=1, padx=(2), sticky="we")
 
         label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="Y : ")
         label.grid(row=0, column=2, padx=(2), sticky="we")
 
-        self.y = ttk.Entry(self.frame)
-        self.y.grid(row=0, column=3, padx=(2), sticky="we")
+        y = ttk.Entry(self.frame, textvariable=self.y_var)
+        y.grid(row=0, column=3, padx=(2), sticky="we")
 
     def get_widget(self):
         return self.frame
@@ -879,10 +1053,14 @@ class GeometryWidget:
 
     def pack(self, *args, **kwargs):
         self.frame.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.x_var.set(self.coordinates[0])
+        self.y_var.set(self.coordinates[1])
 
     def get_value(self):
-        x_value = self.x.get().strip()
-        y_value = self.y.get().strip()
+        x_value = self.x_var.get().strip()
+        y_value = self.y_var.get().strip()
 
         if x_value == "" or y_value == "":
             return ""
@@ -897,8 +1075,8 @@ class GeometryWidget:
         if not allow_null and (value is None or value == ""):
             return False, "Value cannot be NULL or empty."
 
-        max_length = self.column_details.CHARACTER_MAX_LENGTH
-        if max_length != -1 and len(value) > max_length:
+        max_length = self.column_details.CHARACTER_MAXIMUM_LENGTH
+        if max_length is not None and max_length != -1 and len(value) > max_length:
             return False, f"Value exceeds maximum length of {max_length} characters."
 
         if value:
@@ -916,15 +1094,18 @@ class GeographyWidget:
         self.frame.columnconfigure(1, weight=1)
         self.frame.columnconfigure(3, weight=1)
 
+        self.longitude_var = tk.StringVar()
+        self.latitude_var = tk.StringVar()
+
         label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="Longitude: ")
         label.grid(row=0, column=0, padx=(2), sticky="we")
-        self.longitude = ttk.Entry(self.frame)
-        self.longitude.grid(row=0, column=1, padx=(2), sticky="we")
+        longitude = ttk.Entry(self.frame, textvariable=self.longitude_var)
+        longitude.grid(row=0, column=1, padx=(2), sticky="we")
 
         label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="Latitude: ")
         label.grid(row=0, column=2, padx=(2), sticky="we")
-        self.latitude = ttk.Entry(self.frame)
-        self.latitude.grid(row=0, column=3, padx=(2), sticky="we")
+        latitude = ttk.Entry(self.frame, textvariable=self.latitude_var)
+        latitude.grid(row=0, column=3, padx=(2), sticky="we")
 
     def get_widget(self):
         return self.frame
@@ -935,14 +1116,18 @@ class GeographyWidget:
     def pack(self, *args, **kwargs):
         self.frame.pack(*args, **kwargs)
 
+    def reset(self):
+        self.longitude_var.set(0)
+        self.latitude_var.set(0)
+
     def get_value(self):
-        longitude_value = self.longitude.get().strip()
-        latitude_value = self.latitude.get().strip()
+        longitude_value = self.longitude_var.get().strip()
+        latitude_value = self.latitude_var.get().strip()
 
         if longitude_value == "" or latitude_value == "":
             return ""
 
-        return f"geography::Point({longitude_value}, {latitude_value})"
+        return f"geography::Point({longitude_value}, {latitude_value}, 4326)"
 
     def validate(self):
         data_type = self.column_details.DATA_TYPE.lower()
@@ -952,12 +1137,12 @@ class GeographyWidget:
         if not allow_null and (value is None or value == ""):
             return False, "Value cannot be NULL or empty."
 
-        max_length = self.column_details.CHARACTER_MAX_LENGTH
-        if max_length != -1 and len(value) > max_length:
+        max_length = self.column_details.CHARACTER_MAXIMUM_LENGTH
+        if max_length is not None and max_length != -1 and len(value) > max_length:
             return False, f"Value exceeds maximum length of {max_length} characters."
 
         if value:
-            pattern = r"^geography::Point\((-?\d+(\.\d+)?) ?, ?(-?\d+(\.\d+)?)\)$"
+            pattern = r"^geography::Point\((-?\d+(\.\d+)?) ?, ?(-?\d+(\.\d+)?) ?, ?(4326)\)$"
             if not re.match(pattern, value):
                 return False, "Invalid Geography format. Expected format: Point(longitude, latitude)"
 
@@ -967,7 +1152,7 @@ class ImageWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
         self.variable = None
-
+        self.file_path = None
         self.button = ttk.Button(frame, text="Select an Image", command=self.open_file_dialog)
 
     def get_widget(self):
@@ -978,6 +1163,10 @@ class ImageWidget:
 
     def pack(self, *args, **kwargs):
         self.button.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.variable = None
+        self.button.config(text='Select an Image')
 
     def open_file_dialog(self):
         self.file_path = filedialog.askopenfilename(
@@ -989,22 +1178,141 @@ class ImageWidget:
                 self.load_image()
 
     def validate(self):
-        try:
-            img = Image.open(self.file_path)
-            img.verify()
-            return True
-        except (IOError, SyntaxError) as e:
-            messagebox.showerror("Invalid Image", f"Selected file is not a valid image: {e}")
-            return False
+        allow_null = self.column_details.IS_NULLABLE == 'YES'
+        value = self.get_value()
+
+        if not allow_null and (value is None or value == ""):
+            return False, "Value cannot be NULL or empty."
+        if value:
+            try:
+                img = Image.open(self.file_path)
+                img.verify()
+                return True, 'Image Verified'
+            except (IOError, SyntaxError) as e: 
+                return False,  f"Invalid Image, Selected file is not a valid image: {e}"
+
+        return True, "Valid."
 
     def load_image(self):
         with open(self.file_path, 'rb') as img_file:
-            self.variable = img_file.read()
+            self.variable = f'0x{img_file.read().hex()}'
 
         self.button.config(text=self.file_path.split("/")[-1])
 
     def get_value(self):
         return self.variable
+
+class BinaryFileWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.variable = None
+        self.file_path = None
+        self.button = ttk.Button(frame, text="Select a File", command=self.open_file_dialog)
+
+    def get_widget(self):
+        return self.button
+
+    def grid(self, *args, **kwargs):
+        self.button.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.button.pack(*args, **kwargs)
+
+    def reset(self):
+        self.variable = None
+        self.file_path = None
+        self.button.config(text='Select a File')
+
+    def open_file_dialog(self):
+        self.file_path = filedialog.askopenfilename(
+            title="Select a File"
+        )
+        if self.file_path:
+            self.load_binary()
+        else:
+            self.button.config(text="Invalid File Selected")
+
+    def validate(self):
+        allow_null = self.column_details.IS_NULLABLE == 'YES'
+        max_length = self.column_details.CHARACTER_MAXIMUM_LENGTH or -1
+        value = self.get_value() or ''
+
+        if not allow_null and not self.file_path:
+            return False, "Value cannot be NULL or empty."
+
+        if max_length is not None and max_length != -1 and len(value) > max_length:
+            return False, f"Value exceeds maximum length of {max_length} characters."
+
+        try:
+            file_size = os.path.getsize(self.file_path)
+            if file_size == 0:
+                return False, "Selected file is empty."
+            return True, "Valid file selected."
+        except (OSError, IOError) as e:
+            return False, f"File error: {e}"
+
+        return True, "No file path specified."
+
+    def load_binary(self):
+        with open(self.file_path, 'rb') as file:
+            self.variable = f'0x{file.read().hex()}'
+        self.button.config(text=os.path.basename(self.file_path))
+
+    def get_value(self):
+        return self.variable
+
+class HierarchyWidget:
+    def __init__(self, frame, column_details):
+        self.column_details = column_details
+        self.default_value = self.column_details.COLUMN_DEFAULT[2:-2] if self.column_details.COLUMN_DEFAULT else ''
+        self.variable = tk.StringVar(value=self.default_value)
+        self.entry = ttk.Entry(frame, textvariable=self.variable)
+
+    def get_widget(self):
+        return self.entry
+
+    def grid(self, *args, **kwargs):
+        self.entry.grid(*args, **kwargs)
+
+    def pack(self, *args, **kwargs):
+        self.entry.pack(*args, **kwargs)
+    
+    def reset(self):
+        self.variable.set(self.default_value)
+
+    def get_value(self):
+        return self.variable.get().strip()
+
+    def validate(self):
+        value = self.get_value()
+        max_length = self.column_details.CHARACTER_MAXIMUM_LENGTH
+        is_nullable = self.column_details.IS_NULLABLE == 'YES'
+
+        if not isinstance(value, str):
+            return False, "Value must be a string."
+
+        if value == "":
+            if not is_nullable:
+                return False, "This field cannot be empty."
+            else:
+                return True, "Valid."
+
+        if max_length is not None and max_length != -1 and len(value) > max_length:
+            return False, f"Length must not exceed {max_length} characters."
+
+        if not (value.startswith("/") and value.endswith("/")):
+            return False, "Input string must start and end with '/'."
+
+        trimmed_string = value.strip("/")
+        parts = trimmed_string.split("/")
+        for part in parts:
+            if part == "":
+                return False, "Input string cannot have empty segments."
+        
+        if not all(part.isdigit() for part in parts):
+            return False, "All segments must be numeric."
+        
+        return True, "Valid SqlHierarchyId."
 
 class ComponentStyle(ttk.Style):
     def __init__(self, root):

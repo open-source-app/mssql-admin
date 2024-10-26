@@ -10,7 +10,7 @@ from components import (
                         DateTimeWidget,
                         TimeWidget, StringWidget,
                         IntegerWidget,
-                        BinaryWidget,
+                        BinaryEntryWidget,
                         BooleanWidget,
                         FloatWidget,
                         JsonWidget, 
@@ -19,6 +19,11 @@ from components import (
                         GeometryWidget, 
                         GeographyWidget,
                         ImageWidget,
+                        ForeignKeyComboBoxWidget,
+                        SQLWidget,
+                        ErrorWindow,
+                        BinaryFileWidget,
+                        HierarchyWidget
                         )
 from models import CustomLogger, ValueSetter
 from connector import MSSQLDatabase
@@ -312,14 +317,14 @@ class MainPage(ttk.Frame):
             self.selected_table = selected_table
             self.primary_keys = [i[1] for i in self.root.connection.fetch_primary_key_details(selected_table).values]
             info = self.root.connection.fetch_table_details(selected_table)
-            print(f'\n{info.columns=}\n{info.values}\n\n')
             self.table_info = {detail[1]: ValueSetter(info.columns, detail) for detail in info.values}
             self.table_columns = list(self.table_info.keys())
             self.total_pages = math.ceil(self.root.connection.fetch_row_count(selected_table).values[0]/page_size)
-
+            
         if not self.validate():
             return
-
+        for index, col in enumerate(self.table_info.items()):
+            print(index, f' -> {col}\n')
         table_name = self.selected_table
         skip_rows = (self.page_number - 1) * page_size
         fetch_rows = page_size
@@ -368,14 +373,17 @@ class MainPage(ttk.Frame):
 
         label = ttk.Label(self.manipulation_frame, text=f'New Entry for {self.selected_table}', style="Heading.TLabel")
         label.grid(row=0, column=0, columnspan=3, sticky="new", padx=(0, 5), pady=(0, 5))
-        
-        self.column_details_for_entry = [
+
+        column_details_for_entry = [
                 column for key, column in self.table_info.items()
                 if (
                     key in set(self.primary_keys + self.selected_columns)
-                    or column.IS_NULLABLE == 'NO')
-                and column.HAS_IDENTITY == 'NO'
+                    or column.IS_NULLABLE == 'NO'
+                    ) and column.HAS_IDENTITY == 'NO'
+                and column.COLUMN_DEFAULT != '(getdate())'
+                and column.DATA_TYPE != 'timestamp'
                 ]
+
         for key, column in self.table_info.items():
             print(f'''
             {key} ->
@@ -398,16 +406,69 @@ class MainPage(ttk.Frame):
             PrimaryColumn - {column.PrimaryColumn}
             \n'''
                   )
-        for index, column_detail in enumerate(self.column_details_for_entry, 2):
-            
+        self.entry_details = []
+        index = 1
+        for index, column_detail in enumerate(column_details_for_entry, 2):
+
             label_text = f"{column_detail.COLUMN_NAME} {'*' if column_detail.IS_NULLABLE == 'NO' else ''}"
             label = ttk.Label(self.manipulation_frame, text=label_text, style="Small_Bold.TLabel")
             label.grid(row=index//2, column=(2 if index%2 else 0), sticky="new", padx=(0, 5), pady=(0, 5))
 
             entry = self.get_widget_for_data_type(self.manipulation_frame, column_detail)
             entry.grid(row=index//2, column=(3 if index%2 else 1), sticky="new", padx=(0, 50), pady=(0, 5))
+            self.entry_details.append(entry)
 
+        save_button = ttk.Button(self.manipulation_frame, text="Save", style="Bold.TButton", command=self.save_new_entry_data)
+        save_button.grid(row=index+1, columnspan=2, column=0, sticky="we")
+ 
+        cancel_button = ttk.Button(self.manipulation_frame, text="Cancel", style="Bold.TButton", command=self.reset_new_entry_data)
+        cancel_button.grid(row=index+1, columnspan=2, column=2, sticky="we")
         return
+    
+    def validate_new_entry_data(self):
+        errors = []
+        for entry in self.entry_details:
+            success, message = entry.validate()
+            if not success:
+                errors.append(f'{entry.column_details.COLUMN_NAME} - {message}')
+        return errors
+
+    def save_new_entry_data(self):
+        validation_errors = self.validate_new_entry_data()
+        if validation_errors:
+            ErrorWindow(self, errors=validation_errors)
+            return False, 'Validation Error'
+        else:
+            columns = []
+            values = []
+            placeholders = []
+            for details in self.entry_details:
+                try:
+                    value = details.get_value()
+                    if value:
+                        columns.append(details.column_details.COLUMN_NAME)
+                        if isinstance(value, str) and ((value.startswith("geometry::") or value.startswith("geography::")) or details.column_details.DATA_TYPE in ['binary', 'varbinary', 'image']):
+                                placeholders.append(value)
+                        else:
+                            values.append(value)
+                            placeholders.append("?")
+
+                except Exception as e:
+                    print(f"Error processing column '{column_name}': {str(e)}")
+                    return False, str(e)
+
+            query = f"INSERT INTO [{self.selected_table}] ([{'], ['.join(columns)}]) VALUES ({', '.join(placeholders)})"
+            print(query, values, sep='\n\n')
+            insert_result = self.root.connection.insert_data(query, values)
+            if insert_result.status:
+                messagebox.showinfo('Operation Successful', f'Data has been saved in table {self.selected_table}')
+                self.reset_new_entry_data()
+            else:
+                messagebox.showerror('Operation Failed', f'Data could not be saved in table {self.selected_table} due to {insert_result.message}')
+
+    def reset_new_entry_data(self):
+        for entry in self.entry_details:
+            entry.reset()
 
     def get_widget_for_data_type(self, frame, column_details):
         data_type = column_details.DATA_TYPE.lower()
@@ -417,15 +478,20 @@ class MainPage(ttk.Frame):
         integer_types = ['tinyint', 'smallint', 'int', 'bigint']
         float_types = ['decimal', 'numeric', 'smallmoney', 'money', 'float', 'real']
         datetime_types = ['datetime', 'smalldatetime', 'datetime2', 'datetimeoffset']
-
-        if data_type in string_types:
+        
+        if column_details.ForeignKey:
+            vals = self.root.connection.fetch_foreign_table_data(column_details.PrimaryTable, column_details.PrimaryColumn)
+            print(vals.columns, vals.values)
+            foreign_key_values = [i[0] for i in vals.values]
+            return ForeignKeyComboBoxWidget(frame, column_details, foreign_key_values)
+        elif data_type in string_types:
             return StringWidget(frame, column_details)
         elif data_type in integer_types:
             return IntegerWidget(frame, column_details)
         elif data_type in float_types:
             return FloatWidget(frame, column_details)
         elif data_type in binary_types:
-            return BinaryWidget(frame, column_details)
+            return BinaryFileWidget(frame, column_details)
         elif data_type in datetime_types:
             return DateTimeWidget(frame, column_details)
         elif data_type == 'bit':
@@ -446,6 +512,10 @@ class MainPage(ttk.Frame):
             return GeometryWidget(frame, column_details)
         elif data_type == 'image':
             return ImageWidget(frame, column_details)
+        elif data_type == 'sql_variant':
+            return SQLWidget(frame, column_details)
+        elif data_type == 'hierarchyid':
+            return HierarchyWidget(frame, column_details)
         else:
             return StringWidget(frame, column_details)
 
@@ -510,19 +580,8 @@ class MainPage(ttk.Frame):
 
                 elif info.DATA_TYPE == "bit":
                     info.entry_variable = tk.StringVar(value=default_value)
-                    entry = ttk.Combobox(
-                        self.action_frame,
-                        textvariable=info.entry_variable,
-                        values=[1, 0],
-                        state="readonly",
-                    )
-                    entry.grid(
-                        row=index,
-                        column=1 + col,
-                        sticky="new",
-                        padx=(0, 10),
-                        pady=(0, 5),
-                    )
+                    entry = ttk.Combobox(self.action_frame, textvariable=info.entry_variable, values=[1, 0], state="readonly")
+                    entry.grid(row=index, column=1 + col, sticky="new", padx=(0, 10), pady=(0, 5))
 
                 elif info.DATA_TYPE == "datetime" or info.DATA_TYPE == "date":
                     print(default_value.split(' ')[0])
@@ -592,6 +651,7 @@ class MainPage(ttk.Frame):
         self.new_button.config(state='normal')
         self.update_button.config(state='normal')
         self.delete_button.config(state='normal')
+        self.specific_page_button.config(state='normal')
         self.show_selected_columns(selected_table=self.selected_table_var.get())
     
     def get_selected_columns(self, selected_columns):

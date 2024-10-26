@@ -1,7 +1,6 @@
 build
 dist
 virtual
-gajhal.mp4
 main.spec
 temp.txt
 TMS*
@@ -12,3 +11,4 @@ features.txt
 test.txt
 test.py
 bugs.txt
+env_file.py

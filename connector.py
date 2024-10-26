@@ -1,4 +1,3 @@
-import env_file
 import datetime
 import pyodbc
 from models import Objectifier as Objectify
@@ -53,6 +52,11 @@ class MSSQLDatabase:
         filters = []
         return self.fetch_one_data(query, filters)
 
+    def fetch_foreign_table_data(self, table_name, column_name):
+        query = f'SELECT [{column_name}] from [{table_name}];'
+        filters = []
+        return self.fetch_all_data(query, filters)
+
     def get_paginated_results(self, table_name, columns, order_key, skip_rows, fetch_rows):
         query = f"""
             SELECT {columns} 
@@ -61,17 +65,21 @@ class MSSQLDatabase:
             OFFSET ? ROWS
             FETCH NEXT ? ROWS ONLY;
         """
+        print(table_name, columns, order_key, skip_rows, fetch_rows, query)
         return self.fetch_all_data(query, [skip_rows, fetch_rows])
 
     def insert_data(self, query, values):
         try:
             self.cursor.execute(query, values)
             self.conn.commit()
-            return Objectify({'status': 'success', 'rows_affected': self.cursor.rowcount})
+            if self.cursor.rowcount > 0:
+                return Objectify({'status': True, 'rows_affected': self.cursor.rowcount})
+            else:
+                return Objectify({'status': False, 'rows_affected': 0})
         except pyodbc.Error as err:
-            print(f"error inserting data: {err}")
             self.conn.rollback()
-            return Objectify({'status': 'error', 'rows_affected': 0})
+            print(err)
+            return Objectify({'status':  False, 'message': ''.join(err.args[1].split('.')[1:4]).strip()})
 
     def fetch_one_data(self, query, filters=[]):
         try:
