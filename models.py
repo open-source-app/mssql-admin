@@ -1,16 +1,8 @@
 from tkinter import PhotoImage
 from settings import full_path
-import hashlib
 import os
 import logging
 from datetime import datetime
-import socket
-from ping3 import ping
-from typing import Any
-import serial
-from tkinter import PhotoImage
-from pymodbus.client import ModbusTcpClient
-from settings import full_path
 
 
 class CustomLogger:
@@ -58,44 +50,60 @@ class CustomLogger:
     def error(self, message):
         self._logger.error(message)
 
+
 class Objectifier:
     def __init__(self, data):
-        if not type(data) == dict:
-            print('dictionary data type required')
+        if not isinstance(data, dict):
+            print("dictionary data type required")
         else:
             for key, val in data.items():
-                if type(val) == dict:
+                if isinstance(val, dict):
                     setattr(self, key, Objectifier(val))
                 else:
                     setattr(self, key, val)
 
     def get(self, attr):
-        return f'{getattr(self, attr)}'
+        return f"{getattr(self, attr)}"
 
     def __repr__(self):
-        return f'{self.__dict__}'
+        return f"{self.__dict__}"
+
 
 class ValueSetter:
     def __init__(self, columns, values):
-        for index,column in enumerate(columns):
-            setattr(self, column, values[index] if len(values)>index else '')
+        for index, column in enumerate(columns):
+            setattr(self, column, values[index] if len(values) > index else "")
 
     def __getattribute__(self, attr):
         try:
             return super().__getattribute__(attr)
         except AttributeError:
             try:
-                keys = {i.lower():i for i in self.__dict__}
+                keys = {i.lower(): i for i in self.__dict__}
                 return super().__getattribute__(keys.get(attr))
             except AttributeError:
                 return ""
 
+
 class TkImages:
-    def __init__( self, active_image="setup.png", inactive_image="setup.png", disconnected_image="setup.png", subsample=10,):
+    def __init__(
+        self,
+        active_image="setup.png",
+        inactive_image="setup.png",
+        disconnected_image="setup.png",
+        subsample=10,
+    ):
         self.subsample = subsample
-        self.active_image = PhotoImage(file=full_path(active_image)).subsample(self.subsample)
-        self.inactive_image = PhotoImage(file=full_path(inactive_image)).subsample(self.subsample)
-        self.disconnected_image = PhotoImage(file=full_path(disconnected_image)).subsample(self.subsample)
+        self.active_image = PhotoImage(file=full_path(active_image)).subsample(
+            self.subsample
+        )
+        self.inactive_image = PhotoImage(file=full_path(inactive_image)).subsample(
+            self.subsample
+        )
+        self.disconnected_image = PhotoImage(
+            file=full_path(disconnected_image)
+        ).subsample(self.subsample)
+
 
 class CustomImages:
     def __init__(
@@ -130,4 +138,3 @@ class CustomImages:
     def get_disconnected_image(self):
         image = PhotoImage(file=self.disconnected_image)
         return image.subsample(self.subsample)
-

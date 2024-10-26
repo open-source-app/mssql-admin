@@ -1,4 +1,3 @@
-import datetime
 import pyodbc
 from models import Objectifier as Objectify
 import queries as aq
@@ -43,23 +42,20 @@ class MSSQLDatabase:
         return self.fetch_all_data(query, filters)
 
     def fetch_identity_details(self, table_name):
-        query = aq.has_identity
-        filters = [table_name]
-        return self.fetch_one_data(query, filters)
-
-    def fetch_identity_details(self, table_name):
-        query = f'SELECT IDENT_CURRENT({table_name});'
+        query = f"SELECT IDENT_CURRENT({table_name});"
         filters = []
         return self.fetch_one_data(query, filters)
 
     def fetch_foreign_table_data(self, table_name, column_name):
-        query = f'SELECT [{column_name}] from [{table_name}];'
+        query = f"SELECT [{column_name}] from [{table_name}];"
         filters = []
         return self.fetch_all_data(query, filters)
 
-    def get_paginated_results(self, table_name, columns, order_key, skip_rows, fetch_rows):
+    def get_paginated_results(
+        self, table_name, columns, order_key, skip_rows, fetch_rows
+    ):
         query = f"""
-            SELECT {columns} 
+            SELECT {columns}
             FROM [{table_name}]
             ORDER BY {order_key}
             OFFSET ? ROWS
@@ -73,33 +69,42 @@ class MSSQLDatabase:
             self.cursor.execute(query, values)
             self.conn.commit()
             if self.cursor.rowcount > 0:
-                return Objectify({'status': True, 'rows_affected': self.cursor.rowcount})
+                return Objectify(
+                    {"status": True, "rows_affected": self.cursor.rowcount}
+                )
             else:
-                return Objectify({'status': False, 'rows_affected': 0})
+                return Objectify({"status": False, "rows_affected": 0})
         except pyodbc.Error as err:
             self.conn.rollback()
             print(err)
-            return Objectify({'status':  False, 'message': ''.join(err.args[1].split('.')[1:4]).strip()})
+            return Objectify(
+                {
+                    "status": False,
+                    "message": "".join(err.args[1].split(".")[1:4]).strip(),
+                }
+            )
 
     def fetch_one_data(self, query, filters=[]):
         try:
             self.cursor.execute(query, filters)
             columns = [column[0] for column in self.cursor.description]
             record = self.cursor.fetchone()
-            return Objectify({'columns':columns, 'values':list(record) if record else []})
+            return Objectify(
+                {"columns": columns, "values": list(record) if record else []}
+            )
         except pyodbc.Error as err:
             print(f"error fetching record: {err}")
-            return Objectify({'columns':[], 'values':[]})
+            return Objectify({"columns": [], "values": []})
 
     def fetch_all_data(self, query, filters=[]):
         try:
             self.cursor.execute(query, filters)
             columns = [column[0] for column in self.cursor.description]
             record = list(self.cursor.fetchall())
-            return Objectify({'columns':columns, 'values':record})
+            return Objectify({"columns": columns, "values": record})
         except pyodbc.Error as err:
             print(f"error fetching record: {err}")
-            return Objectify({'columns':[], 'values':[]})
+            return Objectify({"columns": [], "values": []})
 
     def close_cursor(self):
         if self.cursor:
@@ -108,4 +113,3 @@ class MSSQLDatabase:
     def close_connection(self):
         if self.conn:
             self.conn.close()
-
