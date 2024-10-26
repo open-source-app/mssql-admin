@@ -192,13 +192,25 @@ class LoginPage(ttk.Frame):
             background="white",
         )
         label.grid(column=0, row=2, sticky="w")
+        
+        file_path = 'config.json'
+        default_config = {}
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as file:
+                try:
+                    self.db_config = json.load(file)
+                except json.JSONDecodeError:
+                    print("Error: Config file is not a valid JSON.")
+                    self.db_config = default_config
+        else:
+            with open(file_path, 'w') as file:
+                json.dump(default_config, file, indent=2)
+                self.db_config = default_config
 
-        with open("config.json", "r") as f:
-            self.config = json.load(f)
         host_combobox = ttk.Combobox(
             frame,
             textvariable=self.host_name_var,
-            values=[users for users in self.config.get("hosts", [])],
+            values=[users for users in self.db_config.get("hosts", [])],
         )
         host_combobox.bind("<<ComboboxSelected>>", self.select_host)
         host_combobox.grid(column=0, row=3, sticky="we", pady=(0, 10))
@@ -284,7 +296,7 @@ class LoginPage(ttk.Frame):
         self.info_label.grid(column=0, row=13, sticky="w", pady=(0, 10))
 
     def select_host(self, event=None):
-        hosts = self.config.get("hosts")
+        hosts = self.db_config.get("hosts")
         if hosts:
             host = hosts.get(self.host_name_var.get())
             self.port_var.set(host.get("port", ""))
@@ -293,9 +305,9 @@ class LoginPage(ttk.Frame):
             self.user_combobox.focus_set()
 
     def select_user(self, event=None):
-        if self.config.get("hosts"):
+        if self.db_config.get("hosts"):
             for user, details in (
-                self.config.get("hosts")
+                self.db_config.get("hosts")
                 .get(self.host_name_var.get())
                 .get("details")
                 .items()
@@ -321,25 +333,25 @@ class LoginPage(ttk.Frame):
             self.info_label.config(text="Enter All the Details")
 
     def save_connection_details(self, host_name, port, user_name, password, db_name):
-        self.config = {
-            **self.config,
+        self.db_config = {
+            **self.db_config,
             "hosts": {
-                **self.config.get("hosts", {}),
+                **self.db_config.get("hosts", {}),
                 host_name: {
                     "port": port,
                     "details": {
-                        **self.config.get("hosts", {})
+                        **self.db_config.get("hosts", {})
                         .get(host_name, {})
                         .get("details", {}),
                         user_name: {
-                            **self.config.get("hosts", {})
+                            **self.db_config.get("hosts", {})
                             .get(host_name, {})
                             .get("details", {})
                             .get(user_name, {}),
                             "password": password,
                             "databases": list(
                                 {
-                                    *self.config.get("hosts", {})
+                                    *self.db_config.get("hosts", {})
                                     .get(host_name, {})
                                     .get("details", {})
                                     .get(user_name, {})
@@ -353,7 +365,7 @@ class LoginPage(ttk.Frame):
             },
         }
         with open("config.json", "w") as f:
-            json.dump(self.config, f, indent=2)
+            json.dump(self.db_config, f, indent=2)
 
 
 class ColumnSelectionWindow(tk.Toplevel):
