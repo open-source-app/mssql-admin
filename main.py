@@ -371,8 +371,6 @@ class MainPage(ttk.Frame):
 
         if not self.validate():
             return
-        for index, col in enumerate(self.table_info.items()):
-            print(index, f" -> {col}\n")
         table_name = self.selected_table
         skip_rows = (self.page_number - 1) * page_size
         fetch_rows = page_size
@@ -448,33 +446,11 @@ class MainPage(ttk.Frame):
             and column.DATA_TYPE != "timestamp"
         ]
 
-        for key, column in self.table_info.items():
-            print(
-                f"""
-            {key} ->
-            --------
-            DATA_TYPE - {column.DATA_TYPE},
-            IS_NULLABLE {column.IS_NULLABLE},
-            HAS_IDENTITY - {column.HAS_IDENTITY},
-            CHARACTER_MAXIMUM_LENGTH - {column.CHARACTER_MAXIMUM_LENGTH},
-            NUMERIC_SCALE - {column.NUMERIC_SCALE},
-            NUMERIC_PRECISION - {column.NUMERIC_PRECISION},
-            COLUMN_DEFAULT - {column.COLUMN_DEFAULT},
-            IDENTITY_SEED - {column.IDENTITY_SEED},
-            IDENTITY_INCREMENT - {column.IDENTITY_INCREMENT},
-            IsComputed - {column.IsComputed},
-            ComputedColumnDefinition - {column.ComputedColumnDefinition},
-            HasDefaultConstraint - {column.HasDefaultConstraint},
-            DefaultConstraintDefinition - {column.DefaultConstraintDefinition},
-            ForeignKey - {column.ForeignKey},
-            PrimaryTable - {column.PrimaryTable},
-            PrimaryColumn - {column.PrimaryColumn}
-            \n"""
-            )
         self.entry_details = []
         index = 1
         for index, column_detail in enumerate(column_details_for_entry, 2):
 
+            column_detail.initial_value = None 
             label_text = f"{column_detail.COLUMN_NAME} {'*' if column_detail.IS_NULLABLE == 'NO' else ''}"
             label = ttk.Label(
                 self.manipulation_frame, text=label_text, style="Small_Bold.TLabel"
@@ -558,7 +534,6 @@ class MainPage(ttk.Frame):
                     return False, str(e)
 
             query = f"INSERT INTO [{self.selected_table}] ([{'], ['.join(columns)}]) VALUES ({', '.join(placeholders)})"
-            print(query, values, sep="\n\n")
             insert_result = self.root.connection.insert_data(query, values)
             if insert_result.status:
                 messagebox.showinfo(
@@ -571,6 +546,115 @@ class MainPage(ttk.Frame):
                     "Operation Failed",
                     f"Data could not be saved in table {self.selected_table} due to {insert_result.message}",
                 )
+
+    def save_update_entry_data(self):
+        validation_errors = self.validate_new_entry_data()
+ 
+    def update_entry_widgets(self):
+        item_index = self.tree.selection()
+        if len(item_index) != 1:
+            messagebox.showinfo("Selection Error", "Select one of the row to update")
+            return
+        
+        item_values = self.tree.item(item_index, 'values')
+        if not self.validate():
+            return
+ 
+        self.tree_frame.grid_remove()
+        self.clean_manipulation_frame()
+        self.manipulation_frame.grid()
+
+        label = ttk.Label(
+            self.manipulation_frame,
+            text=f"Update Entry for {self.selected_table}",
+            style="Heading.TLabel",
+        )
+        label.grid(
+            row=0, column=0, columnspan=3, sticky="new", padx=(0, 5), pady=(0, 5)
+        )
+        item = ValueSetter(self.tree['columns'], item_values)
+        column_details_for_entry = [
+            column
+            for key, column in self.table_info.items()
+            if 
+                key in set(self.primary_keys + self.selected_columns)
+                and (
+                column.HAS_IDENTITY == "NO"
+                and column.COLUMN_DEFAULT != "(getdate())"
+                and column.DATA_TYPE != "timestamp"
+                )
+        ]
+
+        self.entry_details = []
+        index = 1
+        print(item.__dict__, '\n\nprimary keys - ',self.primary_keys, '\nselected columns - ', self.selected_columns, '\ncolumns for entry - ', [c.COLUMN_NAME for c in column_details_for_entry])
+        for index, column_detail in enumerate(column_details_for_entry, 2):
+            column_detail.initial_value = getattr(item, column_detail.COLUMN_NAME)
+            label_text = f"{column_detail.COLUMN_NAME} {'*' if column_detail.IS_NULLABLE == 'NO' else ''}"
+            label = ttk.Label(
+                self.manipulation_frame, text=label_text, style="Small_Bold.TLabel"
+            )
+            label.grid(
+                row=index // 2,
+                column=(2 if index % 2 else 0),
+                sticky="new",
+                padx=(0, 5),
+                pady=(0, 5),
+            )
+
+            entry = self.get_widget_for_data_type(
+                self.manipulation_frame, column_detail
+            )
+            entry.grid(
+                row=index // 2,
+                column=(3 if index % 2 else 1),
+                sticky="new",
+                padx=(0, 50),
+                pady=(0, 5),
+            )
+            self.entry_details.append(entry)
+
+        save_button = ttk.Button(
+            self.manipulation_frame,
+            text="Save",
+            style="Bold.TButton",
+            command=self.save_update_entry_data,
+        )
+        save_button.grid(row=index + 1, columnspan=2, column=0, sticky="we")
+
+        cancel_button = ttk.Button(
+            self.manipulation_frame,
+            text="Cancel",
+            style="Bold.TButton",
+            command=self.reset_new_entry_data,
+        )
+        cancel_button.grid(row=index + 1, columnspan=2, column=2, sticky="we")
+        return
+    
+    def print_table_details(self):
+        for key, column in self.table_info.items():
+            print(
+                f"""
+            {key} ->
+            --------
+            DATA_TYPE - {column.DATA_TYPE},
+            IS_NULLABLE {column.IS_NULLABLE},
+            HAS_IDENTITY - {column.HAS_IDENTITY},
+            CHARACTER_MAXIMUM_LENGTH - {column.CHARACTER_MAXIMUM_LENGTH},
+            NUMERIC_SCALE - {column.NUMERIC_SCALE},
+            NUMERIC_PRECISION - {column.NUMERIC_PRECISION},
+            COLUMN_DEFAULT - {column.COLUMN_DEFAULT},
+            IDENTITY_SEED - {column.IDENTITY_SEED},
+            IDENTITY_INCREMENT - {column.IDENTITY_INCREMENT},
+            IsComputed - {column.IsComputed},
+            ComputedColumnDefinition - {column.ComputedColumnDefinition},
+            HasDefaultConstraint - {column.HasDefaultConstraint},
+            DefaultConstraintDefinition - {column.DefaultConstraintDefinition},
+            ForeignKey - {column.ForeignKey},
+            PrimaryTable - {column.PrimaryTable},
+            PrimaryColumn - {column.PrimaryColumn}
+            \n"""
+            )
 
     def reset_new_entry_data(self):
         for entry in self.entry_details:
@@ -589,7 +673,6 @@ class MainPage(ttk.Frame):
             vals = self.root.connection.fetch_foreign_table_data(
                 column_details.PrimaryTable, column_details.PrimaryColumn
             )
-            print(vals.columns, vals.values)
             foreign_key_values = [i[0] for i in vals.values]
             return ForeignKeyComboBoxWidget(frame, column_details, foreign_key_values)
         elif data_type in string_types:
@@ -627,10 +710,6 @@ class MainPage(ttk.Frame):
         else:
             return StringWidget(frame, column_details)
 
-    def update_entry_widgets(self):
-        self.tree_frame.grid_remove()
-        self.manipulation_frame.grid()
-
     def delete_rows(self):
         pass
 
@@ -650,7 +729,6 @@ class MainPage(ttk.Frame):
 
     def get_selected_columns(self, selected_columns):
         self.selected_columns = selected_columns
-        print(f"{self.selected_columns=}")
         self.show_selected_columns()
 
     def clean_manipulation_frame(self):
