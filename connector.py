@@ -51,6 +51,10 @@ class MSSQLDatabase:
         filters = []
         return self.fetch_all_data(query, filters)
 
+    def get_dependent_tables (self, table_name):
+        query = aq.dependent_tables 
+        return self.fetch_all_data(query, [table_name])
+
     def get_paginated_results(
         self, table_name, columns, order_key, skip_rows, fetch_rows
     ):
@@ -105,6 +109,38 @@ class MSSQLDatabase:
         except pyodbc.Error as err:
             print(f"error fetching record: {err}")
             return Objectify({"columns": [], "values": []})
+    
+    def execute_query(self, query):
+        print('Query - ',query, type(query), len(query))
+        query_type = query.strip().split()[0].lower()
+        try:
+            if query_type == "select":
+                self.cursor.execute(query, [])
+                rows = self.cursor.fetchall()
+                columns = [desc[0] for desc in self.cursor.description]
+                return Objectify({"columns": columns, "values": rows})
+
+            elif query_type in {"insert", "update", "delete"}:
+                self.cursor.execute(query, [])
+                self.conn.commit()
+                return Objectify({"columns": ["Type", "Affected Rows", "Result"], "values":[(query_type, self.cursor.rowcount, "Success")]})
+
+            elif query_type in {"create", "alter", "drop"}:
+                self.cursor.execute(query, [])
+                self.conn.commit()
+                return Objectify({"columns": ["Type", "Result"], "values":[(query_type, "Query Executed Successfully")]})
+
+            elif query_type in {"exec", "sp_help"}:
+                self.cursor.execute(query, [])
+                rows = self.cursor.fetchall()
+                columns = [desc[0] for desc in self.cursor.description]
+                return Objectify({"columns": ["Type", "Result", *columns], "values":[(query_type, 'Success', list(rows))]})
+
+            else:
+                return Objectify({"columns": ["Type", "Result"], "values":[("Unknown", "Query type not supported")]})
+
+        except Exception as e:
+            return Objectify({"columns": ["Type", "Result"], "values":[("Error", f"Error : {e}")]})
 
     def close_cursor(self):
         if self.cursor:
