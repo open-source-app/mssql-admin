@@ -21,7 +21,7 @@ class LoginPage(ttk.Frame):
         super().__init__(parent, style="Primary.TFrame")
         self.on_login_success = on_login_success
         self.parent = parent
-
+        self.file_path = os.path.expanduser('~/config.json')
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=0)
@@ -61,17 +61,16 @@ class LoginPage(ttk.Frame):
         )
         label.grid(column=0, row=2, sticky="w")
         
-        file_path = 'config.json'
         default_config = {}
-        if os.path.exists(file_path):
-            with open(file_path, 'r') as file:
+        if os.path.exists(self.file_path):
+            with open(self.file_path, 'r') as file:
                 try:
                     self.db_config = json.load(file)
                 except json.JSONDecodeError:
                     print("Error: Config file is not a valid JSON.")
                     self.db_config = default_config
         else:
-            with open(file_path, 'w') as file:
+            with open(self.file_path, 'w') as file:
                 json.dump(default_config, file, indent=2)
                 self.db_config = default_config
 
@@ -232,7 +231,7 @@ class LoginPage(ttk.Frame):
                 },
             },
         }
-        with open("config.json", "w") as f:
+        with open(self.file_path, "w") as f:
             json.dump(self.db_config, f, indent=2)
 
 class ColumnSelectionWindow(tk.Toplevel):
@@ -1018,7 +1017,6 @@ class BooleanWidget:
             return False, "Please select 'YES' or 'NO'."
 
         return True, "Valid."
-
 
 class FloatWidget:
     def __init__(self, frame, column_details):

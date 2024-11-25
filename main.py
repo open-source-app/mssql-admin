@@ -26,7 +26,17 @@ from components import (
     BinaryFileWidget,
     HierarchyWidget,
 )
-from models import CustomLogger, ValueSetter
+from models import (
+    CustomLogger,
+    ValueSetter,
+    OriginalData,
+    HierarchyData,
+    GeometryData,
+    GeographyData,
+    ImageData,
+    BinaryData,
+    BooleanData,
+)
 from connector import MSSQLDatabase
 
 
@@ -65,6 +75,7 @@ class DBManager(tk.Tk):
             self.main_page.pack(expand=True, fill="both")
             return "Connection was Successful"
 
+
 class MainPage(ttk.Frame):
     def __init__(self, root):
         self.root = root
@@ -94,13 +105,13 @@ class MainPage(ttk.Frame):
         self.table_mode_frame.grid(row=0, column=0, sticky="nwes", padx=5, pady=2)
         self.table_mode_frame.columnconfigure(1, weight=1)
         self.create_table_mode_frame(self.table_mode_frame)
-        self.table_mode_frame.grid_remove()
+        # self.table_mode_frame.grid_remove()
 
         self.query_mode_frame = ttk.Frame(self, style="Primary.TFrame")
         self.query_mode_frame.grid(row=0, column=0, sticky="nwes", padx=5, pady=0)
         self.query_mode_frame.columnconfigure(0, weight=1)
         self.create_query_frame(self.query_mode_frame)
-        #self.query_mode_frame.grid_remove()
+        self.query_mode_frame.grid_remove()
 
         self.tree_frame = ttk.Frame(self, style="Primary.TFrame")
         self.tree_frame.grid(row=1, column=0, sticky="nwes", padx=5, pady=5)
@@ -144,13 +155,17 @@ class MainPage(ttk.Frame):
         self.reset_all()
 
     def create_query_frame(self, frame):
-        query_label = ttk.Label(frame,style="Normal_Bold.TLabel", text="Enter SQL Query:")
+        query_label = ttk.Label(
+            frame, style="Normal_Bold.TLabel", text="Enter SQL Query:"
+        )
         query_label.grid(row=0, column=0, sticky="nwes", padx=0, pady=0)
 
         self.query_box = tk.Text(frame, height=10, width=60)
         self.query_box.grid(row=1, column=0, sticky="nwes", padx=0, pady=0)
 
-        self.execute_button = ttk.Button(frame, text="Execute Query", command=self.execute_query)
+        self.execute_button = ttk.Button(
+            frame, text="Execute Query", command=self.execute_query
+        )
         self.execute_button.grid(row=2, column=0, sticky="nwes", padx=0, pady=0)
 
     def create_table_mode_frame(self, frame):
@@ -465,7 +480,7 @@ class MainPage(ttk.Frame):
         index = 1
         for index, column_detail in enumerate(column_details_for_entry, 2):
 
-            column_detail.initial_value = None 
+            column_detail.initial_value = None
             column_detail.disabled = False
             label_text = f"{column_detail.COLUMN_NAME} {'*' if column_detail.IS_NULLABLE == 'NO' else ''}"
             label = ttk.Label(
@@ -582,34 +597,39 @@ class MainPage(ttk.Frame):
                         if isinstance(value, str) and (
                             value.startswith("geometry::")
                             or value.startswith("geography::")
-                            or details.column_details.DATA_TYPE in ["binary", "varbinary", "image"]
+                            or details.column_details.DATA_TYPE
+                            in ["binary", "varbinary", "image"]
                         ):
                             placeholders.append(f"[{column_name}] = {value}")
                         else:
                             placeholders.append(f"[{column_name}] = ?")
                             values.append(value)
 
-                    if details.column_details.COLUMN_NAME in (self.primary_keys+self.unique_columns):
+                    if details.column_details.COLUMN_NAME in (
+                        self.primary_keys + self.unique_columns
+                    ):
                         update_keys.append(column_name)
                         update_values.append(value)
 
                 except Exception as e:
-                    print(f"Error processing column {details.column_details.COLUMN_NAME}: {str(e)}")
+                    print(
+                        f"Error processing column {details.column_details.COLUMN_NAME}: {str(e)}"
+                    )
                     return False, str(e)
 
-            where_clause = ' AND '.join(f"[{column}] = ?" for column in update_keys)
+            where_clause = " AND ".join(f"[{column}] = ?" for column in update_keys)
 
             query = f"UPDATE [{self.selected_table}] SET {', '.join(placeholders)} WHERE {where_clause}"
-            
-            print(f'\n\nquery -> {query}\n\nprimary_keys -> {self.primary_keys}\ncolumns -> {self.selected_columns}\nvalues -> {values}\nupdate values -> {update_values}')
 
-            update_result = self.root.connection.insert_data(query, values+update_values)
+            update_result = self.root.connection.insert_data(
+                query, values + update_values
+            )
             if update_result.status:
                 messagebox.showinfo(
                     "Operation Successful",
                     f"Data has been updated in table {self.selected_table}",
                 )
-                #self.reset_new_entry_data()
+                # self.reset_new_entry_data()
             else:
                 messagebox.showerror(
                     "Operation Failed",
@@ -624,31 +644,37 @@ class MainPage(ttk.Frame):
 
         if not self.validate():
             return
- 
+
         if not self.primary_keys:
             permission = messagebox.askyesno(
-                    'Primary Unavailable',
-                    '''This table does not have a primary key. Without a primary key, the update operation will apply to all rows that match the specified filter criteria.
+                "Primary Unavailable",
+                """This table does not have a primary key. Without a primary key, the update operation will apply to all rows that match the specified filter criteria.
                     \rProceeding without a primary key may unintentionally modify multiple records. 
                     \rPlease select some columns that make Unique colum for row
-                    \rDo you want to continue?''')
-            if not permission: 
-                return False, 'No Unique columns selected for update'
-            else: 
+                    \rDo you want to continue?""",
+            )
+            if not permission:
+                return False, "No Unique columns selected for update"
+            else:
                 UniqueColumnSelectionWindow(self)
 
         if not self.unique_columns and not self.primary_keys:
-            return False, 'No Unique columns selected for update'
-        
+            return False, "No Unique columns selected for update"
+
         get_dependent_tables = set(
             i[4]
             for i in self.root.connection.get_dependent_tables(
                 self.selected_table
             ).values
         )
-        print('unique columns', self.unique_columns,'\n Dependent columns', get_dependent_tables) 
+        print(
+            "unique columns",
+            self.unique_columns,
+            "\n Dependent columns",
+            get_dependent_tables,
+        )
 
-        item_values = self.tree.item(item_index, 'values')
+        item_values = self.tree.item(item_index, "values")
 
         self.tree_frame.grid_remove()
         self.clean_manipulation_frame()
@@ -662,25 +688,29 @@ class MainPage(ttk.Frame):
         label.grid(
             row=0, column=0, columnspan=3, sticky="new", padx=(0, 5), pady=(0, 5)
         )
-        item = ValueSetter(self.tree['columns'], item_values)
+        item = ValueSetter(self.tree["columns"], item_values)
         column_details_for_entry = [
             column
             for key, column in self.table_info.items()
-            if 
-                key in set(self.primary_keys + self.selected_columns)
-                and (
+            if key in set(self.primary_keys + self.selected_columns)
+            and (
                 column.COLUMN_DEFAULT != "(getdate())"
                 and column.DATA_TYPE != "timestamp"
-                )
+            )
         ]
 
         self.entry_details = []
         index = 1
-        print(item.__dict__, '\n\nprimary keys - ',self.primary_keys, '\nselected columns - ', self.selected_columns, '\ncolumns for entry - ', [c.COLUMN_NAME for c in column_details_for_entry])
+
         for index, column_detail in enumerate(column_details_for_entry, 2):
             column_detail.initial_value = getattr(item, column_detail.COLUMN_NAME)
-            column_detail.disabled = column_detail.COLUMN_NAME in get_dependent_tables or column_detail.HAS_IDENTITY == "YES"
-            print(column_detail.COLUMN_NAME, 'disabled', column_detail.disabled)
+            column_detail.disabled = (
+                column_detail.COLUMN_NAME in get_dependent_tables
+                or column_detail.HAS_IDENTITY == "YES"
+                or column_detail.COLUMN_NAME
+                in self.primary_keys + self.unique_columns
+            )
+            print(column_detail.COLUMN_NAME, "disabled", column_detail.disabled)
             label_text = f"{column_detail.COLUMN_NAME} {'*' if column_detail.IS_NULLABLE == 'NO' else ''}"
             label = ttk.Label(
                 self.manipulation_frame, text=label_text, style="Small_Bold.TLabel"
@@ -693,7 +723,9 @@ class MainPage(ttk.Frame):
                 pady=(0, 5),
             )
 
-            entry = self.get_widget_for_data_type(self.manipulation_frame, column_detail)
+            entry = self.get_widget_for_data_type(
+                self.manipulation_frame, column_detail
+            )
             entry.grid(
                 row=index // 2,
                 column=(3 if index % 2 else 1),
@@ -721,7 +753,103 @@ class MainPage(ttk.Frame):
         return
 
     def delete_entries(self):
-        ...
+        selections = self.tree.selection()
+        if len(selections) < 1:
+            messagebox.showinfo("Selection Error", "Select atleast one row to Delete")
+            return
+
+        if not self.validate():
+            return
+
+        if not self.primary_keys:
+            if not self.unique_columns:
+                permission = messagebox.askyesno(
+                    "Primary Unavailable",
+                    """This table does not have a primary key. Without a primary key, the Delete operation will apply to all rows that match the specified filter criteria.
+                        \rProceeding without a primary key may unintentionally Delete multiple records. 
+                        \rPlease select some columns that make Unique colum for row
+                        \rDo you want to continue?""",
+                )
+            else:
+                permission = True
+            if not permission:
+                return False, "No Unique columns selected for deleting"
+            else:
+                UniqueColumnSelectionWindow(self)
+
+        if not self.unique_columns and not self.primary_keys:
+            return False, "No Unique columns selected for update"
+
+        for item_index in selections:
+            item_values = self.tree.item(item_index, "values")
+            item = ValueSetter(self.tree["columns"], item_values)
+
+            try:
+                column_details_for_entry = [
+                    column
+                    for key, column in self.table_info.items()
+                    if key in set(self.primary_keys + self.selected_columns)
+                    and (
+                        column.COLUMN_DEFAULT != "(getdate())"
+                        and column.DATA_TYPE != "timestamp"
+                    )
+                ]
+
+                self.entry_details = []
+
+                for index, column_detail in enumerate(column_details_for_entry, 2):
+                    column_detail.initial_value = getattr(item, column_detail.COLUMN_NAME)
+                    column_detail.disabled = True
+                    entry = self.get_data_class_for_data_type(column_detail)
+                    self.entry_details.append(entry)
+
+                where_keys = []
+                where_values = []
+
+                for details in self.entry_details:
+                    try:
+                        value = details.get_value()
+                        column_name = details.column_details.COLUMN_NAME
+
+                        if value is not None and column_name in (
+                            self.primary_keys + self.unique_columns
+                        ):
+                            where_keys.append(f"[{column_name}] = ?")
+                            where_values.append(value)
+
+                    except Exception as e:
+                        print(f"Error processing column {details.column_details.COLUMN_NAME}: {str(e)}")
+                        return False, str(e)
+
+                if not where_keys:
+                    return (
+                        False,
+                        "No valid primary key or unique column values provided for WHERE clause.",
+                    )
+
+                where_clause = " AND ".join(where_keys)
+
+                query = f"DELETE FROM [{self.selected_table}] WHERE {where_clause}"
+                print(query, where_values)
+
+                delete_result = self.root.connection.insert_data(
+                    query, where_values
+                )
+                if delete_result.status:
+                    messagebox.showinfo(
+                        "Operation Successful",
+                        f"Data has been updated in table {self.selected_table}",
+                    )
+                    self.show_selected_columns()
+                else:
+                    messagebox.showerror(
+                        "Operation Failed",
+                        f"Data could not be updated in table {self.selected_table} due to {delete_result.message}",
+                    )
+
+            except Exception as e:
+                print('\nDeletion Error', e)
+                messagebox.showwarning("Deletion Error", "Row can not be deleted")
 
     def print_table_details(self):
         for key, column in self.table_info.items():
@@ -802,6 +930,26 @@ class MainPage(ttk.Frame):
         else:
             return StringWidget(frame, column_details)
 
+    def get_data_class_for_data_type(self, column_details):
+        data_type = column_details.DATA_TYPE.lower()
+
+        binary_types = ["binary", "varbinary"]
+
+        if data_type == "image":
+            return ImageData(column_details)
+        elif data_type in binary_types:
+            return BinaryData(column_details)
+        elif data_type == "bit":
+            return BooleanData(column_details)
+        elif data_type == "geography":
+            return GeographyData(column_details)
+        elif data_type == "geometry":
+            return GeometryData(column_details)
+        elif data_type == "hierarchyid":
+            return HierarchyData(column_details)
+        else:
+            return OriginalData(column_details)
+
     def delete_rows(self):
         pass
 
@@ -838,7 +986,7 @@ class MainPage(ttk.Frame):
             return
 
         result = self.root.connection.execute_query(query)
-        self.update_treeview("Query Result", result.columns, result.values) 
-        
+        self.update_treeview("Query Result", result.columns, result.values)
+
 if __name__ == "__main__":
     DBManager()

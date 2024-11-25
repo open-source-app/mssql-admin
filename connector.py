@@ -74,10 +74,10 @@ class MSSQLDatabase:
             self.conn.commit()
             if self.cursor.rowcount > 0:
                 return Objectify(
-                    {"status": True, "rows_affected": self.cursor.rowcount}
+                        {"status": True, "rows_affected": self.cursor.rowcount, 'message': 'Success'}
                 )
             else:
-                return Objectify({"status": False, "rows_affected": 0})
+                return Objectify({"status": False, "rows_affected": 0, 'message': 'Failed'})
         except pyodbc.Error as err:
             self.conn.rollback()
             print(err)
