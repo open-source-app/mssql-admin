@@ -56,19 +56,19 @@ table_info = """
         c.TABLE_NAME = ?;
     """
 
-dependent_tables = '''SELECT 
+dependent_tables = """SELECT
     fk.name AS ForeignKeyName,
     OBJECT_NAME(fk.parent_object_id) AS DependentTable,
     COL_NAME(fkc.parent_object_id, fkc.parent_column_id) AS DependentColumn,
     OBJECT_NAME(fk.referenced_object_id) AS ReferencedTable,
     COL_NAME(fkc.referenced_object_id, fkc.referenced_column_id) AS ReferencedColumn
-FROM 
+FROM
     sys.foreign_keys AS fk
-JOIN 
-    sys.foreign_key_columns AS fkc 
+JOIN
+    sys.foreign_key_columns AS fkc
     ON fk.object_id = fkc.constraint_object_id
-WHERE 
-    OBJECT_NAME(fk.referenced_object_id) = ?;'''
+WHERE
+    OBJECT_NAME(fk.referenced_object_id) = ?;"""
 
 foreign_keys = """SELECT
     fk.name AS ForeignKey,

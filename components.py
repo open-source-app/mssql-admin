@@ -12,17 +12,17 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, time, date
 from tkinter import ttk, filedialog, messagebox
 from tkcalendar import DateEntry
-from models import TkImages
 from settings import center_window, full_path
 from PIL import Image, ImageTk
+
 
 class LoginPage(ttk.Frame):
     def __init__(self, parent, on_login_success):
         super().__init__(parent, style="Primary.TFrame")
         self.on_login_success = on_login_success
         self.parent = parent
-        self.file_path = os.path.expanduser('~/config.json')
-        self.rowconfigure(0, weight=1)
+        self.file_path = os.path.expanduser("~/config.json")
+        self.rowconfigure(1, weight=1)
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=0)
         self.columnconfigure(2, weight=1)
@@ -32,12 +32,20 @@ class LoginPage(ttk.Frame):
 
         frame = ttk.Frame(self, padding=20, style="Border.TFrame")
         frame.columnconfigure(0, weight=1)
-        frame.grid(column=1, row=0, sticky="wne", pady=(50), padx=20, ipadx=20)
+        frame.grid(column=1, row=1, sticky="wne", pady=(10), padx=20, ipadx=20)
 
         self.heading = ("Helvetica", 14, "bold")
         self.normal_font = ("Helvetica", 12)
         self.small_font = ("Helvetica", 10)
         self.small_bold_font = ("Helvetica", 10, "bold")
+
+        _label = ttk.Label(
+            self,
+            text="DataBase Management Software",
+            font=self.heading,
+            background="white",
+        )
+        _label.grid(column=1, row=0, sticky="wne", pady=(30), padx=20)
 
         self.host_name_var = tk.StringVar(value="")
         self.port_var = tk.StringVar(value="")
@@ -60,17 +68,17 @@ class LoginPage(ttk.Frame):
             background="white",
         )
         label.grid(column=0, row=2, sticky="w")
-        
+
         default_config = {}
         if os.path.exists(self.file_path):
-            with open(self.file_path, 'r') as file:
+            with open(self.file_path, "r") as file:
                 try:
                     self.db_config = json.load(file)
                 except json.JSONDecodeError:
                     print("Error: Config file is not a valid JSON.")
                     self.db_config = default_config
         else:
-            with open(self.file_path, 'w') as file:
+            with open(self.file_path, "w") as file:
                 json.dump(default_config, file, indent=2)
                 self.db_config = default_config
 
@@ -234,6 +242,7 @@ class LoginPage(ttk.Frame):
         with open(self.file_path, "w") as f:
             json.dump(self.db_config, f, indent=2)
 
+
 class ColumnSelectionWindow(tk.Toplevel):
     def __init__(self, parent, notification_type="warning", title="APL Techno"):
         super().__init__(parent)
@@ -286,6 +295,7 @@ class ColumnSelectionWindow(tk.Toplevel):
         self.grab_release()
         self.destroy()
 
+
 class UniqueColumnSelectionWindow(tk.Toplevel):
     def __init__(self, parent, notification_type="warning", title="APL Techno"):
         super().__init__(parent)
@@ -311,8 +321,12 @@ class UniqueColumnSelectionWindow(tk.Toplevel):
 
         main_frame.rowconfigure(0, weight=1)
 
-        label = ttk.Label(main_frame, text='Select Unique Columns from filter columns', style='Normal.TLabel')
-        label.pack(expand=True, fill='both')
+        label = ttk.Label(
+            main_frame,
+            text="Select Unique Columns from filter columns",
+            style="Normal.TLabel",
+        )
+        label.pack(expand=True, fill="both")
 
         self.listbox = tk.Listbox(main_frame, selectmode="multiple")
 
@@ -340,6 +354,7 @@ class UniqueColumnSelectionWindow(tk.Toplevel):
         self.parent.unique_columns = selected_columns
         self.grab_release()
         self.destroy()
+
 
 class ErrorWindow(tk.Toplevel):
     def __init__(
@@ -386,6 +401,7 @@ class ErrorWindow(tk.Toplevel):
         for index, item in enumerate(items, 1):
             text_widget.insert(tk.END, f" {index}. {item}\n")
 
+
 class ImageWindow(tk.Toplevel):
     def __init__(self, parent, image):
         super().__init__(parent)
@@ -400,8 +416,8 @@ class ImageWindow(tk.Toplevel):
         self.focus_set()
         self.bind("<Return>", dismiss)
         self.protocol("WM_DELETE_WINDOW", dismiss)
-        self.iconbitmap(full_path(f"info.ico"))
-        self.title('Image Preview')
+        self.iconbitmap(full_path("info.ico"))
+        self.title("Image Preview")
 
         main_frame = ttk.Frame(self, style="Plane.TFrame")
         main_frame.grid(column=0, row=0, sticky="wnes")
@@ -410,16 +426,17 @@ class ImageWindow(tk.Toplevel):
 
         image_tk = ImageTk.PhotoImage(image)
 
-        label = ttk.Label(main_frame, image=image_tk, style='Normal.TLabel')
+        label = ttk.Label(main_frame, image=image_tk, style="Normal.TLabel")
         label.image = image_tk
-        label.pack(expand=True, fill='both')
+        label.pack(expand=True, fill="both")
 
         self.wait_visibility()
         self.grab_set()
         self.wait_window()
 
+
 class InfoWindow(tk.Toplevel):
-    def __init__( self, parent, text):
+    def __init__(self, parent, text):
         super().__init__(parent)
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
@@ -432,25 +449,26 @@ class InfoWindow(tk.Toplevel):
         self.focus_set()
         self.bind("<Return>", dismiss)
         self.protocol("WM_DELETE_WINDOW", dismiss)
-        self.iconbitmap(full_path(f"info.ico"))
-        self.title('Info')
+        self.iconbitmap(full_path("info.ico"))
+        self.title("Info")
 
         main_frame = ttk.Frame(self, style="Plane.TFrame")
         main_frame.grid(column=0, row=0, sticky="wnes")
         main_frame.columnconfigure(0, weight=1)
         main_frame.rowconfigure(0, weight=1)
 
-        label = ttk.Label(main_frame, text=text, style='Normal.TLabel')
-        label.pack(expand=True, fill='both')
+        label = ttk.Label(main_frame, text=text, style="Normal.TLabel")
+        label.pack(expand=True, fill="both")
 
         self.wait_visibility()
         self.grab_set()
         self.wait_window()
 
+
 class ForeignKeyComboBoxWidget:
     def __init__(self, frame, column_details, foreign_key_values):
         self.column_details = column_details
-        input_state = 'disabled' if self.column_details.disabled else 'readonly'
+        input_state = "disabled" if self.column_details.disabled else "readonly"
         self.foreign_key_values = foreign_key_values
         self.variable = tk.StringVar()
         self.entry = ttk.Combobox(
@@ -490,8 +508,8 @@ class ForeignKeyComboBoxWidget:
 class DateWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value =  self.column_details.initial_value
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
+        self.default_value = self.column_details.initial_value
+        input_state = "disabled" if self.column_details.disabled else "normal"
         self.variable = tk.StringVar()
         self.entry = DateEntry(
             frame,
@@ -531,12 +549,12 @@ class DateWidget:
 class TimeWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value =  self.column_details.initial_value
-        input_state = 'disabled' if self.column_details.disabled else 'readonly'
-        hour = '00'
-        minute = '00'
+        self.default_value = self.column_details.initial_value
+        input_state = "disabled" if self.column_details.disabled else "readonly"
+        hour = "00"
+        minute = "00"
         if self.default_value:
-            hour, minute, second = self.default_value.split(':')
+            hour, minute, second = self.default_value.split(":")
 
         self.frame = ttk.Frame(frame, style="Primary.TFrame")
 
@@ -569,7 +587,7 @@ class TimeWidget:
             values=[f"{i:02}" for i in range(60)],
             width=3,
             state=input_state,
-        ) 
+        )
         start_minute.grid(row=0, column=4, padx=(2), sticky="we")
         start_minute.set(minute)
 
@@ -606,15 +624,15 @@ class TimeWidget:
 class DateTimeWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value =  self.column_details.initial_value
-        input_state = 'disabled' if self.column_details.disabled else 'readonly'
+        self.default_value = self.column_details.initial_value
+        input_state = "disabled" if self.column_details.disabled else "readonly"
         date = None
-        hour = '00'
-        minute = '00'
+        hour = "00"
+        minute = "00"
 
-        if self.default_value and self.default_value != 'None':
-            date, time = self.default_value.split(' ', 1)
-            hour, minute, second = time.split(':', 2)
+        if self.default_value and self.default_value != "None":
+            date, time = self.default_value.split(" ", 1)
+            hour, minute, second = time.split(":", 2)
 
         self.frame = ttk.Frame(frame, style="Primary.TFrame")
 
@@ -630,7 +648,8 @@ class DateTimeWidget:
             self.frame,
             textvariable=self.start_date_var,
             date_pattern="y-mm-dd",
-            width=12, state=input_state,
+            width=12,
+            state=input_state,
             borderwidth=2,
         )
         self.start_date.grid(row=0, column=0, padx=(2), sticky="we")
@@ -727,12 +746,12 @@ class DateTimeWidget:
 class StringWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value =  self.column_details.initial_value or (
+        self.default_value = self.column_details.initial_value or (
             self.column_details.COLUMN_DEFAULT[2:-2]
             if self.column_details.COLUMN_DEFAULT
             else ""
         )
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
+        input_state = "disabled" if self.column_details.disabled else "normal"
         self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, state=input_state, textvariable=self.variable)
 
@@ -774,12 +793,12 @@ class StringWidget:
 class SQLWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value =  self.column_details.initial_value or (
+        self.default_value = self.column_details.initial_value or (
             self.column_details.COLUMN_DEFAULT[2:-2]
             if self.column_details.COLUMN_DEFAULT
             else ""
         )
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
+        input_state = "disabled" if self.column_details.disabled else "normal"
         self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, state=input_state, textvariable=self.variable)
 
@@ -814,12 +833,12 @@ class SQLWidget:
 class IntegerWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value =  self.column_details.initial_value or (
+        self.default_value = self.column_details.initial_value or (
             self.column_details.COLUMN_DEFAULT[2:-2]
             if self.column_details.COLUMN_DEFAULT
             else ""
         )
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
+        input_state = "disabled" if self.column_details.disabled else "normal"
         self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, state=input_state, textvariable=self.variable)
 
@@ -883,12 +902,12 @@ class IntegerWidget:
 class BinaryEntryWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value =  self.column_details.initial_value or (
+        self.default_value = self.column_details.initial_value or (
             self.column_details.COLUMN_DEFAULT[2:-2]
             if self.column_details.COLUMN_DEFAULT
             else ""
         )
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
+        input_state = "disabled" if self.column_details.disabled else "normal"
         self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, state=input_state, textvariable=self.variable)
 
@@ -978,14 +997,21 @@ class BinaryEntryWidget:
 class BooleanWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value = ("YES" if self.column_details.initial_value == 'True' else 'No') if self.column_details.initial_value else None or (
-            ("YES" if self.column_details.COLUMN_DEFAULT[2:-2] == "1" else "NO")
-            if self.column_details.COLUMN_DEFAULT
-            else ""
+        self.default_value = (
+            ("YES" if self.column_details.initial_value == "True" else "No")
+            if self.column_details.initial_value
+            else None
+            or (
+                ("YES" if self.column_details.COLUMN_DEFAULT[2:-2] == "1" else "NO")
+                if self.column_details.COLUMN_DEFAULT
+                else ""
+            )
         )
-        input_state = 'disabled' if self.column_details.disabled else 'readonly'
+        input_state = "disabled" if self.column_details.disabled else "readonly"
         self.variable = tk.StringVar(value=self.default_value)
-        self.entry = ttk.Combobox(frame, textvariable=self.variable, state=input_state, values=["YES", "NO"])
+        self.entry = ttk.Combobox(
+            frame, textvariable=self.variable, state=input_state, values=["YES", "NO"]
+        )
 
     def get_widget(self):
         return self.entry
@@ -1018,18 +1044,21 @@ class BooleanWidget:
 
         return True, "Valid."
 
+
 class FloatWidget:
     def __init__(self, frame, column_details):
         self.frame = frame
         self.column_details = column_details
-        self.default_value =  self.column_details.initial_value or (
+        self.default_value = self.column_details.initial_value or (
             self.column_details.COLUMN_DEFAULT[2:-2]
             if self.column_details.COLUMN_DEFAULT
             else ""
         )
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
+        input_state = "disabled" if self.column_details.disabled else "normal"
         self.variable = tk.StringVar(value=self.default_value)
-        self.entry = ttk.Entry(self.frame, state=input_state, textvariable=self.variable)
+        self.entry = ttk.Entry(
+            self.frame, state=input_state, textvariable=self.variable
+        )
 
     def get_widget(self):
         return self.entry
@@ -1086,6 +1115,7 @@ class FloatWidget:
     def validate_money(self, value):
         try:
             val = float(value)
+            print(val)
         except ValueError:
             return False, "Value must be a valid monetary amount."
 
@@ -1094,6 +1124,7 @@ class FloatWidget:
     def validate_smallmoney(self, value):
         try:
             val = float(value)
+            print(val)
         except ValueError:
             return False, "Value must be a valid monetary amount."
 
@@ -1102,6 +1133,7 @@ class FloatWidget:
     def validate_float(self, value, precision=53):
         try:
             val = float(value)
+            print(val)
         except ValueError:
             return False, "Value must be a valid float."
 
@@ -1122,12 +1154,12 @@ class FloatWidget:
 class JsonWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value =  self.column_details.initial_value or (
+        self.default_value = self.column_details.initial_value or (
             self.column_details.COLUMN_DEFAULT[2:-2]
             if self.column_details.COLUMN_DEFAULT
             else ""
         )
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
+        input_state = "disabled" if self.column_details.disabled else "normal"
         self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, state=input_state, textvariable=self.variable)
 
@@ -1169,12 +1201,12 @@ class JsonWidget:
 class XmlWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value =  self.column_details.initial_value or (
+        self.default_value = self.column_details.initial_value or (
             self.column_details.COLUMN_DEFAULT[2:-2]
             if self.column_details.COLUMN_DEFAULT
             else ""
         )
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
+        input_state = "disabled" if self.column_details.disabled else "normal"
         self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, state=input_state, textvariable=self.variable)
 
@@ -1216,12 +1248,12 @@ class XmlWidget:
 class UUIDWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value =  self.column_details.initial_value or (
+        self.default_value = self.column_details.initial_value or (
             self.column_details.COLUMN_DEFAULT[2:-2]
             if self.column_details.COLUMN_DEFAULT
             else ""
         )
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
+        input_state = "disabled" if self.column_details.disabled else "normal"
         self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, state=input_state, textvariable=self.variable)
 
@@ -1264,8 +1296,8 @@ class UUIDWidget:
 class GeometryWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value =  self.column_details.initial_value
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
+        self.default_value = self.column_details.initial_value
+        input_state = "disabled" if self.column_details.disabled else "normal"
 
         if self.default_value:
             self.coordinates = self.decode(self.default_value)
@@ -1294,13 +1326,17 @@ class GeometryWidget:
     def decode(self, wkb_string):
         try:
             data = ast.literal_eval(wkb_string)
-            srid, version, properties = struct.unpack('<IBB', data[:6])
+            srid, version, properties = struct.unpack("<IBB", data[:6])
             single_point_flag = properties & 0x08
             if not single_point_flag:
-                raise ValueError("Not a single point. Complex geometries need different handling.")
-            x, y = struct.unpack('<dd', data[6:22])
+                raise ValueError(
+                    "Not a single point. Complex geometries need different handling."
+                )
+            x, y = struct.unpack("<dd", data[6:22])
             return round(x, 3), round(y, 3)
-        except: return 0, 0
+        except Exception as e:
+            print(e)
+            return 0, 0
 
     def get_widget(self):
         return self.frame
@@ -1347,14 +1383,14 @@ class GeographyWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
 
-        self.default_value =  self.column_details.initial_value
+        self.default_value = self.column_details.initial_value
 
         if self.default_value:
             self.coordinates = self.decode(self.default_value)
         else:
             self.coordinates = (0, 0)
 
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
+        input_state = "disabled" if self.column_details.disabled else "normal"
         self.frame = ttk.Frame(frame, style="Primary.TFrame")
         self.frame.columnconfigure(1, weight=1)
         self.frame.columnconfigure(3, weight=1)
@@ -1364,12 +1400,16 @@ class GeographyWidget:
 
         label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="Longitude: ")
         label.grid(row=0, column=0, padx=(2), sticky="we")
-        longitude = ttk.Entry(self.frame, state=input_state, textvariable=self.longitude_var)
+        longitude = ttk.Entry(
+            self.frame, state=input_state, textvariable=self.longitude_var
+        )
         longitude.grid(row=0, column=1, padx=(2), sticky="we")
 
         label = ttk.Label(self.frame, style="Small_Bold.TLabel", text="Latitude: ")
         label.grid(row=0, column=2, padx=(2), sticky="we")
-        latitude = ttk.Entry(self.frame, state=input_state, textvariable=self.latitude_var)
+        latitude = ttk.Entry(
+            self.frame, state=input_state, textvariable=self.latitude_var
+        )
         latitude.grid(row=0, column=3, padx=(2), sticky="we")
 
     def get_widget(self):
@@ -1420,13 +1460,18 @@ class GeographyWidget:
     def decode(self, wkb_string):
         try:
             data = ast.literal_eval(wkb_string)
-            srid, version, properties = struct.unpack('<IBB', data[:6])
+            srid, version, properties = struct.unpack("<IBB", data[:6])
             single_point_flag = properties & 0x08
             if not single_point_flag:
-                raise ValueError("Not a single point. Complex geometries need different handling.")
-            x, y = struct.unpack('<dd', data[6:22])
+                raise ValueError(
+                    "Not a single point. Complex geometries need different handling."
+                )
+            x, y = struct.unpack("<dd", data[6:22])
             return round(x, 3), round(y, 3)
-        except: return 0, 0
+        except Exception as e:
+            print(e)
+            return 0, 0
+
 
 class ImageWidget(ttk.Frame):
     def __init__(self, frame, column_details):
@@ -1438,35 +1483,38 @@ class ImageWidget(ttk.Frame):
         self.column_details = column_details
         self.file_path = None
 
-        self.default_value =  self.column_details.initial_value or (
+        self.default_value = self.column_details.initial_value or (
             self.column_details.COLUMN_DEFAULT[2:-2]
             if self.column_details.COLUMN_DEFAULT
             else ""
         )
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
- 
+        input_state = "disabled" if self.column_details.disabled else "normal"
+
         try:
-            self.image_bytes =  ast.literal_eval(self.default_value)
+            self.image_bytes = ast.literal_eval(self.default_value)
             self.variable = f"0x{self.image_bytes.hex()}"
-        except: 
+        except Exception as e:
+            print(e)
             self.variable = None
             self.image_bytes = None
 
-        self.show_button = ttk.Button(
-                self, text="View Image", command=self.show_image
-                )
+        self.show_button = ttk.Button(self, text="View Image", command=self.show_image)
         self.show_button.grid(row=0, column=0, padx=(2), sticky="we")
 
         self.button = ttk.Button(
-            self, text="Select an Image", state=input_state, command=self.open_file_dialog
+            self,
+            text="Select an Image",
+            state=input_state,
+            command=self.open_file_dialog,
         )
         self.button.grid(row=0, column=1, padx=(2), sticky="we")
 
     def reset(self):
         try:
-            self.image_bytes =  ast.literal_eval(self.default_value)
+            self.image_bytes = ast.literal_eval(self.default_value)
             self.variable = f"0x{self.image_bytes.hex()}"
-        except: 
+        except Exception as e:
+            print(e)
             self.variable = None
             self.image_bytes = None
         self.button.config(text="Select an Image")
@@ -1479,7 +1527,7 @@ class ImageWidget(ttk.Frame):
         if self.file_path:
             if self.validate():
                 self.load_image()
-    
+
     def show_image(self):
         if not self.image_bytes:
             messagebox.showerror("Image unavailable", "No image available to view")
@@ -1495,7 +1543,7 @@ class ImageWidget(ttk.Frame):
 
         resized_image = image.resize((new_width, new_height))
 
-        top = ImageWindow(self, resized_image)
+        ImageWindow(self, resized_image)
 
     def validate(self):
         allow_null = self.column_details.IS_NULLABLE == "YES"
@@ -1509,7 +1557,8 @@ class ImageWidget(ttk.Frame):
                     img = Image.open(self.file_path)
                 elif self.image_bytes:
                     img = Image.open(io.BytesIO(self.image_bytes))
-                else: raise Exception
+                else:
+                    raise Exception
                 img.verify()
                 return True, "Image Verified"
             except (IOError, SyntaxError) as e:
@@ -1526,6 +1575,7 @@ class ImageWidget(ttk.Frame):
     def get_value(self):
         return self.variable
 
+
 class BinaryFileWidget(ttk.Frame):
     def __init__(self, frame, column_details):
         super().__init__(frame, style="Primary.TFrame")
@@ -1538,24 +1588,24 @@ class BinaryFileWidget(ttk.Frame):
         self.file_path = None
         self.mime = magic.Magic(mime=True)
 
-        self.default_value =  self.column_details.initial_value or (
+        self.default_value = self.column_details.initial_value or (
             self.column_details.COLUMN_DEFAULT[2:-2]
             if self.column_details.COLUMN_DEFAULT
             else ""
         )
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
- 
+        input_state = "disabled" if self.column_details.disabled else "normal"
+
         try:
-            self.file_bytes =  ast.literal_eval(self.default_value)
+            self.file_bytes = ast.literal_eval(self.default_value)
             self.variable = f"0x{self.file_bytes.hex()}"
-        except Exception as e: 
+        except Exception as e:
             self.file_bytes = None
             self.variable = None
-            print(f'BinaryFileWidget Error :- {e}')
+            print(f"BinaryFileWidget Error :- {e}")
 
         self.show_button = ttk.Button(
-                self, text="View Info", command=self.show_file_details
-                )
+            self, text="View Info", command=self.show_file_details
+        )
         self.show_button.grid(row=0, column=0, padx=(2), sticky="we")
 
         self.button = ttk.Button(
@@ -1565,9 +1615,10 @@ class BinaryFileWidget(ttk.Frame):
 
     def reset(self):
         try:
-            self.file_bytes =  ast.literal_eval(self.default_value)
+            self.file_bytes = ast.literal_eval(self.default_value)
             self.variable = f"0x{self.file_bytes.hex()}"
-        except: 
+        except Exception as e:
+            print(e)
             self.variable = None
             self.file_bytes = None
             self.file_path = None
@@ -1575,14 +1626,16 @@ class BinaryFileWidget(ttk.Frame):
 
     def show_file_details(self):
         if not self.file_bytes:
-            messagebox.showerror("Details unavailable", "File details not available to view")
+            messagebox.showerror(
+                "Details unavailable", "File details not available to view"
+            )
             return
 
         file_type = self.mime.from_buffer(self.file_bytes)
         file_description = magic.from_buffer(self.file_bytes)
 
         text = f"File Type : {file_type}\nFile Description : {file_description}"
-        top = InfoWindow(self, text)
+        InfoWindow(self, text)
 
     def open_file_dialog(self):
         self.file_path = filedialog.askopenfilename(title="Select a File")
@@ -1613,11 +1666,16 @@ class BinaryFileWidget(ttk.Frame):
     def get_value(self):
         return self.variable
 
+
 class HierarchyWidget:
     def __init__(self, frame, column_details):
         self.column_details = column_details
-        self.default_value = self.decode(ast.literal_eval(self.column_details.initial_value)) if self.column_details.initial_value else ''
-        input_state = 'disabled' if self.column_details.disabled else 'normal'
+        self.default_value = (
+            self.decode(ast.literal_eval(self.column_details.initial_value))
+            if self.column_details.initial_value
+            else ""
+        )
+        input_state = "disabled" if self.column_details.disabled else "normal"
         self.variable = tk.StringVar(value=self.default_value)
         self.entry = ttk.Entry(frame, state=input_state, textvariable=self.variable)
 
@@ -1673,16 +1731,18 @@ class HierarchyWidget:
 
         while position < len(binary_data):
             # Parse Li based on possible patterns and move position
-            li = binary_data[position:position+2]  # Get the first 2 bits to check Li patterns
+            li = binary_data[
+                position : position + 2
+            ]  # Get the first 2 bits to check Li patterns
             position += 2
 
-            if li == '01':
-                oi = binary_data[position:position+2]  # Next 2 bits for Oi
+            if li == "01":
+                oi = binary_data[position : position + 2]  # Next 2 bits for Oi
                 position += 2
                 value = int(oi, 2)  # Integer value of Oi
                 label = value + 0  # L1 range 0 to 3, add lower limit
-            elif li == '111110':
-                oi = binary_data[position:position+32]  # Oi for 32/36-bit range
+            elif li == "111110":
+                oi = binary_data[position : position + 32]  # Oi for 32/36-bit range
                 position += 32
                 value = int(oi, 2)  # Integer value of Oi
                 label = value + 5200  # L range 5200 to 4294972495
@@ -1694,9 +1754,9 @@ class HierarchyWidget:
             path.append(label)
 
             # Parse Fi
-            fi = binary_data[position:position+1]
+            fi = binary_data[position : position + 1]
             position += 1
-            is_real = fi == '1'
+            is_real = fi == "1"
 
             if is_real:
                 path.append("/")  # Separator for real nodes
@@ -1708,6 +1768,7 @@ class HierarchyWidget:
             position += len(padding)
 
         return f"/{''.join(map(str, path))}"
+
 
 class ComponentStyle(ttk.Style):
     def __init__(self, root):

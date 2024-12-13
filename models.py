@@ -4,10 +4,9 @@ import magic
 import struct
 import logging
 import tkinter as tk
-from datetime import datetime, time, date
-from tkinter import ttk, filedialog, messagebox, PhotoImage
-from tkcalendar import DateEntry
-from settings import center_window, full_path
+from datetime import datetime
+from tkinter import PhotoImage
+from settings import full_path
 
 
 class CustomLogger:
@@ -89,6 +88,7 @@ class ValueSetter:
             except AttributeError:
                 return ""
 
+
 class TkImages:
     def __init__(
         self,
@@ -143,18 +143,20 @@ class CustomImages:
         image = PhotoImage(file=self.disconnected_image)
         return image.subsample(self.subsample)
 
+
 class OriginalData:
     def __init__(self, column_details):
         self.column_details = column_details
-        self.default_value =  column_details.initial_value
+        self.default_value = column_details.initial_value
 
     def get_value(self):
         return self.default_value
 
+
 class BooleanData:
     def __init__(self, column_details):
         self.column_details = column_details
-        self.default_value =  column_details.initial_value
+        self.default_value = column_details.initial_value
 
     def get_value(self):
         value = self.default_value
@@ -163,10 +165,11 @@ class BooleanData:
         elif value == "False":
             return 0
 
+
 class GeometryData:
     def __init__(self, column_details):
         self.column_details = column_details
-        self.default_value =  column_details.initial_value
+        self.default_value = column_details.initial_value
 
         if self.default_value:
             self.coordinates = self.decode(self.default_value)
@@ -179,13 +182,17 @@ class GeometryData:
     def decode(self, wkb_string):
         try:
             data = ast.literal_eval(wkb_string)
-            srid, version, properties = struct.unpack('<IBB', data[:6])
+            srid, version, properties = struct.unpack("<IBB", data[:6])
             single_point_flag = properties & 0x08
             if not single_point_flag:
-                raise ValueError("Not a single point. Complex geometries need different handling.")
-            x, y = struct.unpack('<dd', data[6:22])
+                raise ValueError(
+                    "Not a single point. Complex geometries need different handling."
+                )
+            x, y = struct.unpack("<dd", data[6:22])
             return round(x, 3), round(y, 3)
-        except: return 0, 0
+        except Exception as e:
+            print(e)
+            return 0, 0
 
     def get_value(self):
         x_value = self.x_var.get().strip()
@@ -196,11 +203,12 @@ class GeometryData:
 
         return f"geometry::STGeomFromText('POINT({x_value} {y_value})', 0)"
 
+
 class GeographyData:
     def __init__(self, column_details):
         self.column_details = column_details
 
-        self.default_value =  self.column_details.initial_value
+        self.default_value = self.column_details.initial_value
 
         if self.default_value:
             self.coordinates = self.decode(self.default_value)
@@ -222,13 +230,18 @@ class GeographyData:
     def decode(self, wkb_string):
         try:
             data = ast.literal_eval(wkb_string)
-            srid, version, properties = struct.unpack('<IBB', data[:6])
+            srid, version, properties = struct.unpack("<IBB", data[:6])
             single_point_flag = properties & 0x08
             if not single_point_flag:
-                raise ValueError("Not a single point. Complex geometries need different handling.")
-            x, y = struct.unpack('<dd', data[6:22])
+                raise ValueError(
+                    "Not a single point. Complex geometries need different handling."
+                )
+            x, y = struct.unpack("<dd", data[6:22])
             return round(x, 3), round(y, 3)
-        except: return 0, 0
+        except Exception as e:
+            print(e)
+            return 0, 0
+
 
 class ImageData:
     def __init__(self, column_details):
@@ -236,21 +249,21 @@ class ImageData:
 
         self.file_path = None
 
-        self.default_value =  column_details.initial_value or (
-            column_details.COLUMN_DEFAULT[2:-2]
-            if column_details.COLUMN_DEFAULT
-            else ""
+        self.default_value = column_details.initial_value or (
+            column_details.COLUMN_DEFAULT[2:-2] if column_details.COLUMN_DEFAULT else ""
         )
- 
+
         try:
-            self.image_bytes =  ast.literal_eval(self.default_value)
+            self.image_bytes = ast.literal_eval(self.default_value)
             self.variable = f"0x{self.image_bytes.hex()}"
-        except: 
+        except Exception as e:
+            print(e)
             self.variable = None
             self.image_bytes = None
 
     def get_value(self):
         return self.variable
+
 
 class BinaryData:
     def __init__(self, column_details):
@@ -259,27 +272,30 @@ class BinaryData:
         self.file_path = None
         self.mime = magic.Magic(mime=True)
 
-        self.default_value =  column_details.initial_value or (
-            column_details.COLUMN_DEFAULT[2:-2]
-            if column_details.COLUMN_DEFAULT
-            else ""
+        self.default_value = column_details.initial_value or (
+            column_details.COLUMN_DEFAULT[2:-2] if column_details.COLUMN_DEFAULT else ""
         )
- 
+
         try:
-            self.file_bytes =  ast.literal_eval(self.default_value)
+            self.file_bytes = ast.literal_eval(self.default_value)
             self.variable = f"0x{self.file_bytes.hex()}"
-        except Exception as e: 
+        except Exception as e:
             self.file_bytes = None
             self.variable = None
-            print(f'BinaryFileData Error :- {e}')
+            print(f"BinaryFileData Error :- {e}")
 
     def get_value(self):
         return self.variable
 
+
 class HierarchyData:
     def __init__(self, column_details):
         self.column_details = column_details
-        self.default_value = self.decode(ast.literal_eval(column_details.initial_value)) if column_details.initial_value else ''
+        self.default_value = (
+            self.decode(ast.literal_eval(column_details.initial_value))
+            if column_details.initial_value
+            else ""
+        )
         self.variable = tk.StringVar(value=self.default_value)
 
     def get_value(self):
@@ -292,16 +308,18 @@ class HierarchyData:
 
         while position < len(binary_data):
             # Parse Li based on possible patterns and move position
-            li = binary_data[position:position+2]  # Get the first 2 bits to check Li patterns
+            li = binary_data[
+                position : position + 2
+            ]  # Get the first 2 bits to check Li patterns
             position += 2
 
-            if li == '01':
-                oi = binary_data[position:position+2]  # Next 2 bits for Oi
+            if li == "01":
+                oi = binary_data[position : position + 2]  # Next 2 bits for Oi
                 position += 2
                 value = int(oi, 2)  # Integer value of Oi
                 label = value + 0  # L1 range 0 to 3, add lower limit
-            elif li == '111110':
-                oi = binary_data[position:position+32]  # Oi for 32/36-bit range
+            elif li == "111110":
+                oi = binary_data[position : position + 32]  # Oi for 32/36-bit range
                 position += 32
                 value = int(oi, 2)  # Integer value of Oi
                 label = value + 5200  # L range 5200 to 4294972495
@@ -313,9 +331,9 @@ class HierarchyData:
             path.append(label)
 
             # Parse Fi
-            fi = binary_data[position:position+1]
+            fi = binary_data[position : position + 1]
             position += 1
-            is_real = fi == '1'
+            is_real = fi == "1"
 
             if is_real:
                 path.append("/")  # Separator for real nodes
@@ -326,4 +344,3 @@ class HierarchyData:
             position += len(padding)
 
         return f"/{''.join(map(str, path))}"
-

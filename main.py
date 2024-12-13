@@ -584,7 +584,6 @@ class MainPage(ttk.Frame):
             ErrorWindow(self, errors=validation_errors)
             return False, "Validation Error"
         else:
-            columns = []
             values = []
             placeholders = []
             update_keys = []
@@ -649,7 +648,7 @@ class MainPage(ttk.Frame):
             permission = messagebox.askyesno(
                 "Primary Unavailable",
                 """This table does not have a primary key. Without a primary key, the update operation will apply to all rows that match the specified filter criteria.
-                    \rProceeding without a primary key may unintentionally modify multiple records. 
+                    \rProceeding without a primary key may unintentionally modify multiple records.
                     \rPlease select some columns that make Unique colum for row
                     \rDo you want to continue?""",
             )
@@ -707,8 +706,7 @@ class MainPage(ttk.Frame):
             column_detail.disabled = (
                 column_detail.COLUMN_NAME in get_dependent_tables
                 or column_detail.HAS_IDENTITY == "YES"
-                or column_detail.COLUMN_NAME
-                in self.primary_keys + self.unique_columns
+                or column_detail.COLUMN_NAME in self.primary_keys + self.unique_columns
             )
             print(column_detail.COLUMN_NAME, "disabled", column_detail.disabled)
             label_text = f"{column_detail.COLUMN_NAME} {'*' if column_detail.IS_NULLABLE == 'NO' else ''}"
@@ -766,7 +764,7 @@ class MainPage(ttk.Frame):
                 permission = messagebox.askyesno(
                     "Primary Unavailable",
                     """This table does not have a primary key. Without a primary key, the Delete operation will apply to all rows that match the specified filter criteria.
-                        \rProceeding without a primary key may unintentionally Delete multiple records. 
+                        \rProceeding without a primary key may unintentionally Delete multiple records.
                         \rPlease select some columns that make Unique colum for row
                         \rDo you want to continue?""",
                 )
@@ -798,7 +796,9 @@ class MainPage(ttk.Frame):
                 self.entry_details = []
 
                 for index, column_detail in enumerate(column_details_for_entry, 2):
-                    column_detail.initial_value = getattr(item, column_detail.COLUMN_NAME)
+                    column_detail.initial_value = getattr(
+                        item, column_detail.COLUMN_NAME
+                    )
                     column_detail.disabled = True
                     entry = self.get_data_class_for_data_type(column_detail)
                     self.entry_details.append(entry)
@@ -818,7 +818,9 @@ class MainPage(ttk.Frame):
                             where_values.append(value)
 
                     except Exception as e:
-                        print(f"Error processing column {details.column_details.COLUMN_NAME}: {str(e)}")
+                        print(
+                            f"Error processing column {details.column_details.COLUMN_NAME}: {str(e)}"
+                        )
                         return False, str(e)
 
                 if not where_keys:
@@ -832,9 +834,7 @@ class MainPage(ttk.Frame):
                 query = f"DELETE FROM [{self.selected_table}] WHERE {where_clause}"
                 print(query, where_values)
 
-                delete_result = self.root.connection.insert_data(
-                    query, where_values
-                )
+                delete_result = self.root.connection.insert_data(query, where_values)
                 if delete_result.status:
                     messagebox.showinfo(
                         "Operation Successful",
@@ -848,7 +848,7 @@ class MainPage(ttk.Frame):
                     )
 
             except Exception as e:
-                print('\nDeletion Error', e)
+                print("\nDeletion Error", e)
                 messagebox.showwarning("Deletion Error", "Row can not be deleted")
 
     def print_table_details(self):
@@ -978,7 +978,8 @@ class MainPage(ttk.Frame):
     def execute_query(self):
         try:
             query = self.query_box.get("sel.first", "sel.last").strip()
-        except:
+        except Exception as e:
+            print(e)
             query = self.query_box.get("1.0", tk.END).strip()
 
         if not query:
@@ -987,6 +988,7 @@ class MainPage(ttk.Frame):
 
         result = self.root.connection.execute_query(query)
         self.update_treeview("Query Result", result.columns, result.values)
+
 
 if __name__ == "__main__":
     DBManager()
